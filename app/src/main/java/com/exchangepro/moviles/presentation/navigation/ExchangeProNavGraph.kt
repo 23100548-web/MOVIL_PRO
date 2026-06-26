@@ -6,12 +6,15 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.exchangepro.moviles.presentation.auth.LoginScreen
 import com.exchangepro.moviles.presentation.auth.RegisterScreen
+import com.exchangepro.moviles.presentation.disputes.DisputesScreen
 import com.exchangepro.moviles.presentation.home.HomeScreen
+import com.exchangepro.moviles.presentation.notifications.NotificationsScreen
 import com.exchangepro.moviles.presentation.offers.CreateOfferScreen
 import com.exchangepro.moviles.presentation.offers.MyOffersScreen
 import com.exchangepro.moviles.presentation.offers.OffersScreen
 import com.exchangepro.moviles.presentation.payment.PaymentDataScreen
 import com.exchangepro.moviles.presentation.placeholder.PendingScreen
+import com.exchangepro.moviles.presentation.profile.ProfileScreen
 import com.exchangepro.moviles.presentation.transactions.TransactionsScreen
 import com.exchangepro.moviles.presentation.wallet.WalletScreen
 
@@ -44,13 +47,13 @@ fun ExchangeProNavGraph() {
             ExchangeScaffold(navController, "Datos de pago") { PaymentDataScreen() }
         }
         composable(Route.Disputes.value) {
-            ExchangeScaffold(navController, "Disputas", content = { PendingScreen("Disputas", "Integrante 4") })
+            ExchangeScaffold(navController, "Disputas", content = { DisputesScreen() })
         }
         composable(Route.Profile.value) {
-            ExchangeScaffold(navController, "Perfil") { PendingScreen("Perfil", "Integrante 4") }
+            ExchangeScaffold(navController, "Perfil") { ProfileScreen() }
         }
         composable(Route.Notifications.value) {
-            ExchangeScaffold(navController, "Notificaciones") { PendingScreen("Notificaciones", "Integrante 4") }
+            ExchangeScaffold(navController, "Notificaciones") { NotificationsScreen() }
         }
         composable(Route.AdminDashboard.value) {
             ExchangeScaffold(navController, "Dashboard", isAdmin = true) { PendingScreen("Dashboard admin", "Integrante 5") }
