@@ -1,7 +1,0 @@
-com.exchangepro.moviles.app-pngs-0 D:\MOVILES_PRO_2\app\build\generated\res\pngs\debug
-com.exchangepro.moviles.app-updated_navigation_xml-1 D:\MOVILES_PRO_2\app\build\generated\updated_navigation_xml\debug
-com.exchangepro.moviles.app-packageDebugResources-2 D:\MOVILES_PRO_2\app\build\intermediates\incremental\debug\packageDebugResources\merged.dir
-com.exchangepro.moviles.app-packageDebugResources-3 D:\MOVILES_PRO_2\app\build\intermediates\incremental\debug\packageDebugResources\stripped.dir
-com.exchangepro.moviles.app-debug-4 D:\MOVILES_PRO_2\app\build\intermediates\merged_res\debug\mergeDebugResources
-com.exchangepro.moviles.app-debug-5 D:\MOVILES_PRO_2\app\src\debug\res
-com.exchangepro.moviles.app-main-6 D:\MOVILES_PRO_2\app\src\main\res
