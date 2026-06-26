@@ -6,6 +6,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.exchangepro.moviles.presentation.auth.LoginScreen
 import com.exchangepro.moviles.presentation.auth.RegisterScreen
+import com.exchangepro.moviles.presentation.offers.CreateOfferScreen
+import com.exchangepro.moviles.presentation.offers.MyOffersScreen
+import com.exchangepro.moviles.presentation.offers.OffersScreen
 import com.exchangepro.moviles.presentation.placeholder.PendingScreen
 import com.exchangepro.moviles.presentation.wallet.WalletScreen
 
@@ -20,13 +23,13 @@ fun ExchangeProNavGraph() {
             ExchangeScaffold(navController, "Inicio") { PendingScreen("Inicio", "Integrante 4") }
         }
         composable(Route.Offers.value) {
-            ExchangeScaffold(navController, "Ofertas") { PendingScreen("Ofertas", "Integrante 3") }
+            ExchangeScaffold(navController, "Ofertas") { OffersScreen(navController) }
         }
         composable(Route.CreateOffer.value) {
-            ExchangeScaffold(navController, "Crear oferta") { PendingScreen("Crear oferta", "Integrante 3") }
+            ExchangeScaffold(navController, "Crear oferta") { CreateOfferScreen(navController) }
         }
         composable(Route.MyOffers.value) {
-            ExchangeScaffold(navController, "Mis ofertas") { PendingScreen("Mis ofertas", "Integrante 3") }
+            ExchangeScaffold(navController, "Mis ofertas") { MyOffersScreen(navController) }
         }
         composable(Route.Wallet.value) {
             ExchangeScaffold(navController, "Wallet") { WalletScreen() }
