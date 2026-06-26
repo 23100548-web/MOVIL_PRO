@@ -9,6 +9,7 @@ import com.exchangepro.moviles.presentation.auth.RegisterScreen
 import com.exchangepro.moviles.presentation.offers.CreateOfferScreen
 import com.exchangepro.moviles.presentation.offers.MyOffersScreen
 import com.exchangepro.moviles.presentation.offers.OffersScreen
+import com.exchangepro.moviles.presentation.payment.PaymentDataScreen
 import com.exchangepro.moviles.presentation.placeholder.PendingScreen
 import com.exchangepro.moviles.presentation.wallet.WalletScreen
 
@@ -38,7 +39,7 @@ fun ExchangeProNavGraph() {
             ExchangeScaffold(navController, "Transacciones") { PendingScreen("Transacciones", "Integrante 4") }
         }
         composable(Route.PaymentData.value) {
-            ExchangeScaffold(navController, "Datos de pago") { PendingScreen("Datos de pago", "Integrante 3") }
+            ExchangeScaffold(navController, "Datos de pago") { PaymentDataScreen() }
         }
         composable(Route.Disputes.value) {
             ExchangeScaffold(navController, "Disputas", content = { PendingScreen("Disputas", "Integrante 4") })
