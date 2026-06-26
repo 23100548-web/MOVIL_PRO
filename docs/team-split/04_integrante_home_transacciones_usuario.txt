@@ -1,0 +1,90 @@
+INTEGRANTE 4 - HOME, TRANSACCIONES, DISPUTAS DE USUARIO, PERFIL Y NOTIFICACIONES
+================================================================================
+
+Objetivo
+--------
+Completar las pantallas de usuario normal alrededor del mercado P2P:
+dashboard, transacciones, disputas, perfil y notificaciones.
+
+Archivos principales a trabajar
+-------------------------------
+1. app/src/main/java/com/exchangepro/moviles/presentation/home/HomeScreen.kt
+2. app/src/main/java/com/exchangepro/moviles/presentation/transactions/TransactionsScreen.kt
+3. app/src/main/java/com/exchangepro/moviles/presentation/disputes/DisputesScreen.kt
+4. app/src/main/java/com/exchangepro/moviles/presentation/profile/ProfileScreen.kt
+5. app/src/main/java/com/exchangepro/moviles/presentation/notifications/NotificationsScreen.kt
+
+Tareas detalladas
+-----------------
+1. HomeScreen.kt:
+   - Crear dashboard inicial similar al web.
+   - Saludo o cabecera principal.
+   - Estado del mercado P2P.
+   - Cards de resumen:
+     Wallet.
+     Ofertas.
+     Transacciones.
+     Perfil.
+   - Acciones rapidas:
+     Crear oferta.
+     Recargar wallet.
+   - Ultimas ofertas.
+   - Actividad reciente.
+
+2. TransactionsScreen.kt:
+   - Lista de transacciones.
+   - Cards con estado:
+     PENDIENTE.
+     PAGADO.
+     COMPLETADO.
+     CANCELADO.
+     EN_DISPUTA.
+   - Al tocar una transaccion, abrir detalle.
+   - Mostrar timeline/progreso.
+   - Mostrar participantes.
+   - Mostrar monto, tasa, moneda.
+   - Acciones demo:
+     Subir comprobante.
+     Liberar fondos.
+     Cancelar.
+     Abrir disputa.
+
+3. DisputesScreen.kt:
+   - Formulario para crear disputa.
+   - Selector de transaccion.
+   - Motivo.
+   - Descripcion.
+   - Evidencias demo.
+   - Advertencia o nota antes de crear.
+   - Lista de disputas ya creadas.
+
+4. ProfileScreen.kt:
+   - Avatar o card de usuario.
+   - Nombre completo.
+   - Correo.
+   - Documento.
+   - Telefono editable.
+   - Reputacion.
+   - Botones Guardar y Cancelar.
+   - Preparado para foto de perfil despues.
+
+5. NotificationsScreen.kt:
+   - Lista de notificaciones.
+   - Marcar como leida al tocar.
+   - Badge o etiqueta Nuevo.
+   - Diferenciar notificaciones leidas/no leidas.
+
+Comandos sugeridos
+------------------
+git checkout -b feature/pantallas-usuario
+git add app/src/main/java/com/exchangepro/moviles/presentation/home/HomeScreen.kt
+git add app/src/main/java/com/exchangepro/moviles/presentation/transactions/TransactionsScreen.kt
+git add app/src/main/java/com/exchangepro/moviles/presentation/disputes/DisputesScreen.kt
+git add app/src/main/java/com/exchangepro/moviles/presentation/profile/ProfileScreen.kt
+git add app/src/main/java/com/exchangepro/moviles/presentation/notifications/NotificationsScreen.kt
+git commit -m "Implement user dashboard transactions disputes profile and notifications"
+
+Notas para el equipo
+--------------------
+Este commit puede usar datos demo. La prioridad es que el flujo visual quede completo.
+Firebase se conectara despues, cuando auth y roles ya esten listos.

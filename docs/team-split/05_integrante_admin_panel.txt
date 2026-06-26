@@ -1,0 +1,116 @@
+INTEGRANTE 5 - PANEL ADMINISTRADOR
+==================================
+
+Objetivo
+--------
+Crear el flujo administrador en Android, basado en el frontend web:
+dashboard, disputas, feedback, reportes y notificaciones.
+
+Archivos principales a trabajar
+-------------------------------
+1. app/src/main/java/com/exchangepro/moviles/presentation/admin/AdminScreens.kt
+2. app/src/main/java/com/exchangepro/moviles/presentation/navigation/Routes.kt
+3. app/src/main/java/com/exchangepro/moviles/presentation/navigation/ExchangeScaffold.kt
+4. app/src/main/java/com/exchangepro/moviles/presentation/navigation/ExchangeProNavGraph.kt
+5. app/src/main/java/com/exchangepro/moviles/presentation/auth/AuthScreens.kt
+
+Tareas detalladas
+-----------------
+1. Crear carpeta:
+   app/src/main/java/com/exchangepro/moviles/presentation/admin
+
+2. Crear AdminScreens.kt con:
+   - AdminDashboardScreen.
+   - AdminDisputesScreen.
+   - AdminFeedbackScreen.
+   - AdminReportsScreen.
+   - AdminNotificationsScreen.
+
+3. AdminDashboardScreen:
+   - Titulo Dashboard.
+   - Subtitulo Panel de control administrativo.
+   - Barra de estado de plataforma.
+   - Cards de estadisticas:
+     Usuarios Registrados.
+     Ofertas Activas.
+     Transacciones Completadas.
+     Disputas Pendientes.
+   - Actividad reciente.
+   - Acciones rapidas para ir a disputas y reportes.
+
+4. AdminDisputesScreen:
+   - Lista de disputas.
+   - Filtros Todos / Pendientes / Resueltas.
+   - Cards expandibles.
+   - Ver comprador, vendedor, monto, evidencia y descripcion.
+   - Dialog para resolver:
+     decision.
+     observacion.
+   - Al resolver, actualizar estado local a Resueltas.
+
+5. AdminFeedbackScreen:
+   - Estadisticas de feedback.
+   - Filtros Todos / RECOMENDACION / BUG_REPORT.
+   - Cards expandibles.
+   - Dialog para responder comentario.
+   - Al responder, actualizar estado a REVISADO.
+
+6. AdminReportsScreen:
+   - Filtros:
+     Tipo de reporte.
+     Moneda.
+     Estado.
+   - Boton Generar Reporte.
+   - Tabla/lista de resultados demo.
+   - Boton Exportar preparado.
+
+7. AdminNotificationsScreen:
+   - Lista de alertas administrativas.
+   - Mostrar Nuevo si no fue leida.
+
+8. Modificar Routes.kt:
+   - admin_dashboard
+   - admin_disputes
+   - admin_feedback
+   - admin_reports
+   - admin_notifications
+
+9. Modificar ExchangeScaffold.kt:
+   - Agregar parametro isAdmin.
+   - Si isAdmin es true, mostrar menu:
+     Dashboard.
+     Disputas.
+     Feedback.
+     Reportes.
+     Notificaciones.
+   - Si isAdmin es false, mostrar menu normal de usuario.
+
+10. Modificar ExchangeProNavGraph.kt:
+   - Registrar todas las rutas admin.
+   - Usar ExchangeScaffold(isAdmin = true).
+
+11. Modificar AuthScreens.kt:
+   - Login mock con:
+     admin@exchange-pro.com
+   - Si usa ese correo, navegar a AdminDashboard.
+   - La contrasena puede ser cualquiera no vacia hasta conectar Firebase.
+   - Para probar usar:
+     admin@exchange-pro.com / Admin123
+
+Comandos sugeridos
+------------------
+git checkout -b feature/admin-panel
+git add app/src/main/java/com/exchangepro/moviles/presentation/admin
+git add app/src/main/java/com/exchangepro/moviles/presentation/navigation/Routes.kt
+git add app/src/main/java/com/exchangepro/moviles/presentation/navigation/ExchangeScaffold.kt
+git add app/src/main/java/com/exchangepro/moviles/presentation/navigation/ExchangeProNavGraph.kt
+git add app/src/main/java/com/exchangepro/moviles/presentation/auth/AuthScreens.kt
+git commit -m "Implement admin panel flow"
+
+Notas para el equipo
+--------------------
+Este modulo depende de la navegacion base del integrante 1.
+El admin real se conectara despues con Firebase Auth + Firestore role ADMIN.
+En el SQL original el admin era:
+admin@exchange-pro.com / Admin123
+con IdRol = 2.

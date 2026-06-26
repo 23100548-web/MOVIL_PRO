@@ -1,0 +1,22 @@
+{
+  "project_info": {
+    "project_id": "replace-with-your-firebase-project",
+    "storage_bucket": "replace-with-your-firebase-project.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "replace-with-your-app-id",
+        "android_client_info": {
+          "package_name": "com.exchangepro.moviles"
+        }
+      },
+      "api_key": [
+        {
+          "current_key": "replace-with-your-api-key"
+        }
+      ]
+    }
+  ],
+  "configuration_version": "1"
+}

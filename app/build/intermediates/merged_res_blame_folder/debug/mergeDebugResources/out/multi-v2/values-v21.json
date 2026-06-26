@@ -1,0 +1,20 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.exchangepro.moviles.app-mergeDebugResources-57:/values-v21/values-v21.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\gusta\\.gradle\\caches\\9.3.1\\transforms\\e6987c5418106a7cc8ff6ce33c86e0dd\\workspace\\transformed\\credentials-play-services-auth-1.2.0-rc01\\res\\values-v21\\values-v21.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endLines": "9",
+                        "endColumns": "12",
+                        "endOffsets": "543"
+                    }
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+      Aumentamos el tamaño a 240dp para que el logo se vea notablemente más grande.
+      En Android 12+, el sistema intentará centrarlo y mostrar la mayor parte posible
+      dentro del área del splash screen.
+    -->
+    <item
+        android:drawable="@drawable/app_logo"
+        android:gravity="center"
+        android:width="240dp"
+        android:height="240dp" />
+</layer-list>

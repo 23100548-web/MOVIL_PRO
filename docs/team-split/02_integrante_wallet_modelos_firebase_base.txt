@@ -1,0 +1,84 @@
+INTEGRANTE 2 - MODELOS, WALLET Y BASE FIREBASE
+==============================================
+
+Objetivo
+--------
+Construir la base de datos en codigo para ExchangePro: modelos de dominio, constantes de Firebase,
+repositorios iniciales y pantalla Wallet con recargas.
+
+Archivos principales a trabajar
+-------------------------------
+1. app/src/main/java/com/exchangepro/moviles/domain/model/ExchangeModels.kt
+2. app/src/main/java/com/exchangepro/moviles/data/firebase/FirebasePlaceholders.kt
+3. app/src/main/java/com/exchangepro/moviles/data/repository/ExchangeRateRepository.kt
+4. app/src/main/java/com/exchangepro/moviles/data/repository/FirebaseWalletRepository.kt
+5. app/src/main/java/com/exchangepro/moviles/presentation/wallet/WalletScreen.kt
+6. docs/firestore-schema.md si se documenta el esquema
+
+Tareas detalladas
+-----------------
+1. En ExchangeModels.kt definir o completar:
+   - CurrencyCode: PEN, USD, EUR, JPY, GBP.
+   - DepositAccount.
+   - WalletMovement.
+   - TopUpRequest.
+   - ExchangeRate.
+   - CreateOfferRequest si aun no existe.
+
+2. En FirebasePlaceholders.kt agregar nombres de colecciones:
+   - USERS
+   - WALLETS
+   - BALANCES
+   - TOP_UPS
+   - OFFERS
+   - TRANSACTIONS
+   - PAYMENT_METHODS
+   - DISPUTES
+   - FEEDBACK
+   - NOTIFICATIONS
+
+3. Crear ExchangeRateRepository.kt:
+   - Preparar consumo de API externa de tasas.
+   - Usar api.frankfurter.app como referencia inicial.
+   - Si no hay red o falla la API, devolver tasas demo para que la UI no se rompa.
+
+4. Crear FirebaseWalletRepository.kt:
+   - Preparar metodos para leer saldos.
+   - Preparar metodos para crear solicitud de recarga.
+   - Preparar movimiento de wallet.
+   - Usar Firestore de forma defensiva para que no crashee si aun falta google-services.json.
+
+5. Crear o mejorar WalletScreen.kt:
+   - Mostrar saldos por moneda.
+   - Mostrar tipo de cambio.
+   - Mostrar movimientos recientes.
+   - Boton o modal "Recargar saldo".
+   - Modal similar al web:
+     Wallet #2.
+     Selector de moneda.
+     Monto a recargar.
+     Cuentas para depositar: Yape, Plin, BCP u otras.
+   - Por ahora puede usar datos demo.
+
+6. Documentar esquema propuesto en docs/firestore-schema.md:
+   users/{uid}
+   wallets/{uid}/balances/{currency}
+   topUps/{topUpId}
+   walletMovements/{movementId}
+
+Comandos sugeridos
+------------------
+git checkout -b feature/wallet-firebase-base
+git add app/src/main/java/com/exchangepro/moviles/domain/model/ExchangeModels.kt
+git add app/src/main/java/com/exchangepro/moviles/data/firebase/FirebasePlaceholders.kt
+git add app/src/main/java/com/exchangepro/moviles/data/repository/ExchangeRateRepository.kt
+git add app/src/main/java/com/exchangepro/moviles/data/repository/FirebaseWalletRepository.kt
+git add app/src/main/java/com/exchangepro/moviles/presentation/wallet/WalletScreen.kt
+git add docs/firestore-schema.md
+git commit -m "Add wallet models Firebase base and recharge flow"
+
+Notas para el equipo
+--------------------
+Este commit puede no funcionar solo si aun no existe la navegacion base del integrante 1.
+No conectar todavia un Firebase real con credenciales privadas.
+No subir google-services.json real si el profesor no lo pidio publicamente.

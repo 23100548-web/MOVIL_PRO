@@ -1,0 +1,91 @@
+INTEGRANTE 3 - OFERTAS, CREAR OFERTA Y DATOS DE PAGO
+====================================================
+
+Objetivo
+--------
+Migrar el flujo P2P principal del web a Android: listar ofertas, ver detalle, crear oferta,
+mis ofertas y configurar datos de pago.
+
+Archivos principales a trabajar
+-------------------------------
+1. app/src/main/java/com/exchangepro/moviles/presentation/offers/OfferScreens.kt
+2. app/src/main/java/com/exchangepro/moviles/presentation/payment/PaymentDataScreen.kt
+3. app/src/main/java/com/exchangepro/moviles/data/repository/FirebaseOfferRepository.kt
+4. app/src/main/java/com/exchangepro/moviles/domain/model/ExchangeModels.kt si necesita modelos compartidos
+
+Tareas detalladas
+-----------------
+1. En OfferScreens.kt crear o mejorar:
+   - OffersScreen.
+   - MyOffersScreen.
+   - CreateOfferScreen.
+
+2. OffersScreen debe tener:
+   - Tabs o botones: Nueva / Mis ofertas.
+   - Cards de ofertas con:
+     usuario
+     moneda origen/destino
+     tasa
+     disponible
+     tipo COMPRA o VENTA
+   - Al tocar una oferta, abrir detalle.
+   - En detalle permitir iniciar compra o venta si no es una oferta propia.
+
+3. MyOffersScreen debe tener:
+   - Lista de mis ofertas.
+   - Detalle al tocar una oferta.
+   - Boton visible para crear oferta.
+   - Boton o accion para volver a Ofertas/Nueva.
+
+4. CreateOfferScreen debe parecerse al web:
+   - Titulo "Crear Oferta".
+   - Card de saldo disponible.
+   - Seccion "Detalles de la Oferta".
+   - Selectores desplegables para:
+     Tipo de Operacion.
+     Moneda a Vender.
+     Moneda a Recibir.
+     Tasa de Cambio.
+   - Campos numericos para:
+     Monto a Ofertar.
+     Monto Minimo por operacion.
+   - Botones Cancelar y Publicar Oferta.
+   - Validar solo al publicar, no antes.
+   - Las listas deben abrir al tocar la flecha o el campo.
+
+5. FirebaseOfferRepository.kt:
+   - Preparar createOffer.
+   - Preparar retencion de saldo segun operacion.
+   - Para COMPRA: retener moneda destino si aplica.
+   - Para VENTA: retener moneda origen.
+   - Puede quedar preparado con Firestore, aunque algunos datos sean demo.
+
+6. PaymentDataScreen.kt debe tener:
+   - Seccion Yape:
+     numero de 9 digitos.
+   - Seccion Plin:
+     numero de 9 digitos.
+   - Seccion Transferencia Bancaria:
+     selector de banco.
+     cuenta bancaria.
+     CCI.
+   - Bancos como lista fija:
+     BCP, Interbank, BBVA, Scotiabank.
+   - Validaciones:
+     Yape/Plin: 9 digitos.
+     Cuenta: 14 digitos.
+     CCI: 20 digitos.
+
+Comandos sugeridos
+------------------
+git checkout -b feature/ofertas-datos-pago
+git add app/src/main/java/com/exchangepro/moviles/presentation/offers/OfferScreens.kt
+git add app/src/main/java/com/exchangepro/moviles/presentation/payment/PaymentDataScreen.kt
+git add app/src/main/java/com/exchangepro/moviles/data/repository/FirebaseOfferRepository.kt
+git add app/src/main/java/com/exchangepro/moviles/domain/model/ExchangeModels.kt
+git commit -m "Implement offers creation and payment data flows"
+
+Notas para el equipo
+--------------------
+La lista de bancos no usa API en el web original; era una lista fija.
+Este modulo depende de las rutas del integrante 1 y de algunos modelos del integrante 2.

@@ -1,0 +1,106 @@
+INTEGRANTE 1 - BASE DEL PROYECTO, AUTH Y NAVEGACION
+====================================================
+
+Objetivo
+--------
+Preparar la base del proyecto Android ExchangePro para que las demas pantallas puedan conectarse.
+Esta persona debe encargarse de la estructura principal, autenticacion mock, navegacion, drawer y limpieza
+del codigo viejo com.soltis.p2p.
+
+Importante
+----------
+Esta parte es la mas importante para que las demas ramas tengan una base comun. Idealmente este commit debe
+entrar primero al repositorio.
+
+Archivos principales a trabajar
+-------------------------------
+1. app/src/main/java/com/exchangepro/moviles/presentation/auth/AuthScreens.kt
+2. app/src/main/java/com/exchangepro/moviles/presentation/navigation/Routes.kt
+3. app/src/main/java/com/exchangepro/moviles/presentation/navigation/ExchangeScaffold.kt
+4. app/src/main/java/com/exchangepro/moviles/presentation/navigation/ExchangeProNavGraph.kt
+5. app/src/main/java/com/exchangepro/moviles/MainActivity.kt
+6. app/src/main/res/drawable/*
+7. app/src/main/res/mipmap-*/*
+8. app/src/main/res/values/colors.xml
+9. app/src/main/res/values/strings.xml
+10. app/src/main/res/xml/backup_rules.xml
+11. app/src/main/res/xml/data_extraction_rules.xml
+
+Tambien debe mover o retirar del source set principal:
+------------------------------------------------------
+app/src/main/java/com/soltis/p2p/*
+
+Y conservarlo como referencia en:
+---------------------------------
+legacy_soltis_reference/soltis/p2p/*
+
+Tareas detalladas
+-----------------
+1. Crear o mantener el paquete principal:
+   com.exchangepro.moviles
+
+2. Revisar que MainActivity cargue:
+   ExchangeProNavGraph()
+
+3. Crear el archivo Routes.kt con rutas para:
+   - login
+   - register
+   - home
+   - offers
+   - create_offer
+   - my_offers
+   - wallet
+   - transactions
+   - payment_data
+   - disputes
+   - profile
+   - notifications
+   - admin_dashboard
+   - admin_disputes
+   - admin_feedback
+   - admin_reports
+   - admin_notifications
+
+4. Crear ExchangeScaffold.kt:
+   - Drawer normal para usuario.
+   - Drawer admin para administrador.
+   - Boton de cerrar sesion.
+   - Top bar con titulo.
+   - Parametro isAdmin para cambiar el menu.
+
+5. Crear ExchangeProNavGraph.kt:
+   - Registrar todas las rutas.
+   - Login y register sin scaffold.
+   - Pantallas internas con ExchangeScaffold.
+   - Pantallas admin con ExchangeScaffold(isAdmin = true).
+
+6. Crear AuthScreens.kt:
+   - Login con correo y contrasena.
+   - Registro con nombres, apellidos, correo, telefono, documento, contrasena y confirmacion.
+   - Validaciones locales.
+   - Login mock:
+     Si el correo es admin@exchange-pro.com, navegar a admin_dashboard.
+     Si es otro correo valido, navegar a home.
+   - Usar trim() al validar correo para evitar espacios copiados.
+
+7. Recursos:
+   - Mantener iconos launcher en res/mipmap.
+   - Mantener drawable base.
+   - No borrar archivos de res aunque parezcan pequenos, porque Android los usa para compilar, icono, backup y tema.
+
+Comandos sugeridos
+------------------
+git checkout -b feature/base-auth-navegacion
+git add app/src/main/java/com/exchangepro/moviles/MainActivity.kt
+git add app/src/main/java/com/exchangepro/moviles/presentation/auth/AuthScreens.kt
+git add app/src/main/java/com/exchangepro/moviles/presentation/navigation
+git add app/src/main/res
+git add legacy_soltis_reference
+git add app/src/main/java/com/soltis
+git commit -m "Setup base navigation auth and legacy cleanup"
+
+Notas para el equipo
+--------------------
+Este commit puede tocar muchos archivos porque limpia el proyecto viejo y deja lista la estructura ExchangePro.
+No incluir .idea/misc.xml.
+No incluir google-services.json real si contiene credenciales del proyecto Firebase.
