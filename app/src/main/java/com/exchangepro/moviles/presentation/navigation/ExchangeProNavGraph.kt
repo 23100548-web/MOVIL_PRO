@@ -7,6 +7,8 @@ import androidx.navigation.compose.rememberNavController
 import com.exchangepro.moviles.presentation.admin.AdminDashboardScreen
 import com.exchangepro.moviles.presentation.admin.AdminDisputesScreen
 import com.exchangepro.moviles.presentation.admin.AdminFeedbackScreen
+import com.exchangepro.moviles.presentation.admin.AdminNotificationsScreen
+import com.exchangepro.moviles.presentation.admin.AdminReportsScreen
 import com.exchangepro.moviles.presentation.auth.LoginScreen
 import com.exchangepro.moviles.presentation.auth.RegisterScreen
 import com.exchangepro.moviles.presentation.disputes.DisputesScreen
@@ -16,7 +18,6 @@ import com.exchangepro.moviles.presentation.offers.CreateOfferScreen
 import com.exchangepro.moviles.presentation.offers.MyOffersScreen
 import com.exchangepro.moviles.presentation.offers.OffersScreen
 import com.exchangepro.moviles.presentation.payment.PaymentDataScreen
-import com.exchangepro.moviles.presentation.placeholder.PendingScreen
 import com.exchangepro.moviles.presentation.profile.ProfileScreen
 import com.exchangepro.moviles.presentation.transactions.TransactionsScreen
 import com.exchangepro.moviles.presentation.wallet.WalletScreen
@@ -70,10 +71,12 @@ fun ExchangeProNavGraph() {
             ExchangeScaffold(navController, "Feedback", isAdmin = true) { AdminFeedbackScreen() }
         }
         composable(Route.AdminReports.value) {
-            ExchangeScaffold(navController, "Reportes", isAdmin = true) { PendingScreen("Reportes admin", "Integrante 5") }
+            ExchangeScaffold(navController, "Reportes", isAdmin = true) { AdminReportsScreen() }
         }
         composable(Route.AdminNotifications.value) {
-            ExchangeScaffold(navController, "Notificaciones", isAdmin = true) { PendingScreen("Notificaciones admin", "Integrante 5") }
+            ExchangeScaffold(navController, "Notificaciones", isAdmin = true) {
+                AdminNotificationsScreen()
+            }
         }
     }
 }
