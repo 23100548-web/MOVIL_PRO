@@ -22,7 +22,8 @@ class FirebaseWalletRepository(
     private val authProvider: () -> FirebaseAuth = { FirebaseAuth.getInstance() },
     private val dbProvider: () -> FirebaseFirestore = { FirebaseFirestore.getInstance() }
 ) {
-    private fun userId(): String = authProvider().currentUser?.uid ?: DEMO_USER_ID
+    private fun userId(): String =
+        authProvider().currentUser?.uid ?: error("No hay una sesion activa.")
 
     suspend fun getWallet(): Wallet {
         val db = dbProvider()
@@ -35,11 +36,7 @@ class FirebaseWalletRepository(
 
         val balances = balancesSnapshot.documents.mapNotNull { it.toWalletBalance() }
 
-        return if (balances.isNotEmpty()) {
-            Wallet(userId = uid, balances = balances.sortedBy { it.currency.ordinal })
-        } else {
-            fallbackWallet(uid)
-        }
+        return Wallet(userId = uid, balances = balances.sortedBy { it.currency.ordinal })
     }
 
     suspend fun getMovements(limit: Long = 20): List<WalletMovement> {
@@ -143,17 +140,6 @@ class FirebaseWalletRepository(
         )
     }
 
-    private fun fallbackWallet(uid: String): Wallet = Wallet(
-        userId = uid,
-        balances = listOf(
-            WalletBalance(CurrencyCode.PEN, available = 4_250.50, retained = 0.0),
-            WalletBalance(CurrencyCode.USD, available = 980.00, retained = 0.0)
-        )
-    )
-
-    private companion object {
-        const val DEMO_USER_ID = "demo-user"
-    }
 }
 
 private suspend fun <T> Task<T>.await(): T = suspendCancellableCoroutine { continuation ->

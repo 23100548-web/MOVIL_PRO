@@ -91,7 +91,7 @@ fun WalletScreen() {
     val exchangeRateRepository = remember { ExchangeRateRepository() }
     val scope = rememberCoroutineScope()
 
-    var wallet by remember { mutableStateOf(demoWallet()) }
+    var wallet by remember { mutableStateOf(Wallet(userId = "", balances = emptyList())) }
     var movements by remember { mutableStateOf(emptyList<WalletMovement>()) }
     var rates by remember { mutableStateOf(emptyList<ExchangeRate>()) }
     var loading by remember { mutableStateOf(true) }
@@ -105,10 +105,11 @@ fun WalletScreen() {
             try {
                 wallet = walletRepository.getWallet()
                 movements = runCatching { walletRepository.getMovements() }.getOrDefault(emptyList())
+                message = null
             } catch (error: Exception) {
-                wallet = demoWallet()
+                wallet = Wallet(userId = "", balances = emptyList())
                 movements = emptyList()
-                message = "Mostrando datos demo hasta conectar Firebase: ${error.message.orEmpty()}"
+                message = "No se pudo cargar la wallet: ${error.message.orEmpty()}"
             } finally {
                 loading = false
             }
@@ -553,14 +554,6 @@ private fun exchangeProAccounts() = listOf(
     DepositAccount("PLIN", "Plin", "999 888 777", "ExchangePro"),
     DepositAccount("BCP", "BCP - Cuenta Corriente", "193-1234567-0-00", "CCI: 002-193-1234567000-00"),
     DepositAccount("INTERBANK", "Interbank - Cuenta Corriente", "898-1234567890", "CCI: 003-898-1234567890-00")
-)
-
-private fun demoWallet() = Wallet(
-    userId = "demo-user",
-    balances = listOf(
-        WalletBalance(CurrencyCode.PEN, available = 4_250.50, retained = 350.00),
-        WalletBalance(CurrencyCode.USD, available = 980.00, retained = 120.00)
-    )
 )
 
 private fun currencyName(currency: CurrencyCode): String = when (currency) {

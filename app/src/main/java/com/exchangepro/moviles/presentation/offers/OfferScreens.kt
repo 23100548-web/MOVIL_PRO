@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -52,7 +53,6 @@ import androidx.navigation.NavController
 import com.exchangepro.moviles.data.repository.ExchangeRateRepository
 import com.exchangepro.moviles.data.repository.FirebaseOfferRepository
 import com.exchangepro.moviles.data.repository.FirebaseWalletRepository
-import com.exchangepro.moviles.data.repository.MockExchangeRepository
 import com.exchangepro.moviles.domain.model.CreateOfferRequest
 import com.exchangepro.moviles.domain.model.CurrencyCode
 import com.exchangepro.moviles.domain.model.ExchangeRate
@@ -76,9 +76,30 @@ import kotlin.math.round
 
 @Composable
 fun OffersScreen(navController: NavController) {
+    val offerRepository = remember { FirebaseOfferRepository() }
+    val scope = rememberCoroutineScope()
+    val currentUserId = remember { offerRepository.currentUserId() }
+    var offers by remember { mutableStateOf(emptyList<Offer>()) }
     var selectedOffer by remember { mutableStateOf<Offer?>(null) }
     var takingOffer by remember { mutableStateOf<Offer?>(null) }
     var actionMessage by remember { mutableStateOf<String?>(null) }
+    var actionFailed by remember { mutableStateOf(false) }
+    var loading by remember { mutableStateOf(true) }
+
+    suspend fun reloadOffers() {
+        offers = offerRepository.getActiveOffers()
+    }
+
+    LaunchedEffect(Unit) {
+        try {
+            reloadOffers()
+        } catch (error: Exception) {
+            actionFailed = true
+            actionMessage = error.message ?: "No se pudieron cargar las ofertas."
+        } finally {
+            loading = false
+        }
+    }
 
     LazyColumn(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
@@ -90,24 +111,47 @@ fun OffersScreen(navController: NavController) {
             )
         }
         actionMessage?.let {
-            item { Text(it, color = ExchangePositive, style = MaterialTheme.typography.bodySmall) }
+            item { Text(it, color = if (actionFailed) ExchangeNegative else ExchangePositive, style = MaterialTheme.typography.bodySmall) }
         }
-        items(MockExchangeRepository.offers) { offer ->
-            OfferCard(offer, onClick = { selectedOffer = offer })
+        if (loading) {
+            item {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                    CircularProgressIndicator(color = ExchangePrimary)
+                }
+            }
+        } else if (offers.isEmpty()) {
+            item {
+                ExchangeCard {
+                    Text("No hay ofertas activas en este momento.", color = ExchangeMuted)
+                }
+            }
+        } else {
+            items(offers) { offer ->
+                OfferCard(offer, onClick = { selectedOffer = offer })
+            }
         }
     }
 
     selectedOffer?.let { offer ->
         OfferDetailDialog(
             offer = offer,
-            isMine = offer.userId == MockExchangeRepository.currentUser.id,
+            isMine = offer.userId == currentUserId,
             onDismiss = { selectedOffer = null },
             onAction = {
-                actionMessage = if (offer.userId == MockExchangeRepository.currentUser.id) {
-                    "Esta es tu oferta. Luego conectaremos cancelar/pausar con Firebase."
+                if (offer.userId == currentUserId) {
+                    scope.launch {
+                        try {
+                            offerRepository.cancelOffer(offer.id)
+                            reloadOffers()
+                            actionFailed = false
+                            actionMessage = "Oferta cancelada y saldo liberado."
+                        } catch (error: Exception) {
+                            actionFailed = true
+                            actionMessage = error.message ?: "No se pudo cancelar la oferta."
+                        }
+                    }
                 } else {
                     takingOffer = offer
-                    null
                 }
                 selectedOffer = null
             }
@@ -119,6 +163,7 @@ fun OffersScreen(navController: NavController) {
             offer = offer,
             onDismiss = { takingOffer = null },
             onDone = { code ->
+                actionFailed = false
                 actionMessage = "Transaccion $code iniciada. Siguiente paso: subir comprobante en Transacciones."
                 takingOffer = null
             }
@@ -128,10 +173,28 @@ fun OffersScreen(navController: NavController) {
 
 @Composable
 fun MyOffersScreen(navController: NavController) {
-    val userId = MockExchangeRepository.currentUser.id
-    val myOffers = MockExchangeRepository.offers.filter { it.userId == userId }
+    val offerRepository = remember { FirebaseOfferRepository() }
+    val scope = rememberCoroutineScope()
+    var myOffers by remember { mutableStateOf(emptyList<Offer>()) }
     var selectedOffer by remember { mutableStateOf<Offer?>(null) }
     var actionMessage by remember { mutableStateOf<String?>(null) }
+    var actionFailed by remember { mutableStateOf(false) }
+    var loading by remember { mutableStateOf(true) }
+
+    suspend fun reloadOffers() {
+        myOffers = offerRepository.getMyActiveOffers()
+    }
+
+    LaunchedEffect(Unit) {
+        try {
+            reloadOffers()
+        } catch (error: Exception) {
+            actionFailed = true
+            actionMessage = error.message ?: "No se pudieron cargar tus ofertas."
+        } finally {
+            loading = false
+        }
+    }
 
     LazyColumn(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
@@ -147,9 +210,15 @@ fun MyOffersScreen(navController: NavController) {
             Text("Revisa tus publicaciones o crea una nueva oferta.", color = ExchangeMuted)
         }
         actionMessage?.let {
-            item { Text(it, color = ExchangePositive, style = MaterialTheme.typography.bodySmall) }
+            item { Text(it, color = if (actionFailed) ExchangeNegative else ExchangePositive, style = MaterialTheme.typography.bodySmall) }
         }
-        if (myOffers.isEmpty()) {
+        if (loading) {
+            item {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                    CircularProgressIndicator(color = ExchangePrimary)
+                }
+            }
+        } else if (myOffers.isEmpty()) {
             item {
                 ExchangeCard {
                     Text("Aun no tienes ofertas publicadas.", color = ExchangeMuted)
@@ -173,7 +242,17 @@ fun MyOffersScreen(navController: NavController) {
             isMine = true,
             onDismiss = { selectedOffer = null },
             onAction = {
-                actionMessage = "Luego conectaremos cancelar/pausar esta oferta con Firebase."
+                scope.launch {
+                    try {
+                        offerRepository.cancelOffer(offer.id)
+                        reloadOffers()
+                        actionFailed = false
+                        actionMessage = "Oferta cancelada y saldo liberado."
+                    } catch (error: Exception) {
+                        actionFailed = true
+                        actionMessage = error.message ?: "No se pudo cancelar la oferta."
+                    }
+                }
                 selectedOffer = null
             }
         )
@@ -187,7 +266,7 @@ fun CreateOfferScreen(navController: NavController) {
     val rateRepository = remember { ExchangeRateRepository() }
     val scope = rememberCoroutineScope()
 
-    var wallet by remember { mutableStateOf(MockExchangeRepository.wallet) }
+    var wallet by remember { mutableStateOf(Wallet(userId = "", balances = emptyList())) }
     var rates by remember { mutableStateOf(emptyList<ExchangeRate>()) }
     var operationType by remember { mutableStateOf<OperationType?>(null) }
     var fromCurrency by remember { mutableStateOf<CurrencyCode?>(null) }
@@ -204,7 +283,9 @@ fun CreateOfferScreen(navController: NavController) {
     }
 
     LaunchedEffect(Unit) {
-        wallet = runCatching { walletRepository.getWallet() }.getOrDefault(MockExchangeRepository.wallet)
+        wallet = runCatching { walletRepository.getWallet() }
+            .onFailure { message = it.message ?: "No se pudo cargar la wallet." }
+            .getOrDefault(Wallet(userId = "", balances = emptyList()))
         rates = rateRepository.getRates()
     }
 
