@@ -6,13 +6,13 @@ import com.exchangepro.moviles.domain.model.TopUpRequest
 import com.exchangepro.moviles.domain.model.Wallet
 import com.exchangepro.moviles.domain.model.WalletBalance
 import com.exchangepro.moviles.domain.model.WalletMovement
+import com.exchangepro.moviles.domain.model.WithdrawalRequest
 import com.google.android.gms.tasks.Task
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
@@ -43,12 +43,13 @@ class FirebaseWalletRepository(
         val db = dbProvider()
         val snapshot = db.collection(FirebaseCollections.WALLET_MOVEMENTS)
             .whereEqualTo("userId", userId())
-            .orderBy("createdAt", Query.Direction.DESCENDING)
-            .limit(limit)
             .get()
             .await()
 
-        return snapshot.documents.mapNotNull { it.toWalletMovement() }
+        return snapshot.documents
+            .mapNotNull { it.toWalletMovement() }
+            .sortedByDescending { it.createdAtMillis }
+            .take(limit.toInt())
     }
 
     suspend fun topUp(request: TopUpRequest) {
@@ -104,6 +105,83 @@ class FirebaseWalletRepository(
                     "result" to "EXITOSO",
                     "referenceType" to request.paymentMethod,
                     "referenceId" to topUpRef.id,
+                    "createdAt" to FieldValue.serverTimestamp()
+                )
+            )
+            null
+        }.await()
+    }
+
+    suspend fun withdraw(request: WithdrawalRequest) {
+        require(request.amount > 0.0) { "El monto debe ser mayor a 0." }
+        val db = dbProvider()
+        val uid = userId()
+        val walletRef = db.collection(FirebaseCollections.WALLETS).document(uid)
+        val balanceRef = walletRef.collection(FirebaseCollections.BALANCES).document(request.currency.name)
+        val paymentRef = db.collection(FirebaseCollections.PAYMENT_DATA).document(uid)
+        val withdrawalRef = db.collection(FirebaseCollections.WITHDRAWALS).document()
+        val movementRef = db.collection(FirebaseCollections.WALLET_MOVEMENTS).document()
+
+        db.runTransaction { transaction ->
+            val balance = transaction.get(balanceRef)
+            val payment = transaction.get(paymentRef)
+            require(payment.exists()) { "Primero registra tus datos de pago." }
+
+            val destination = when (request.paymentMethodKey) {
+                "YAPE" -> payment.getString("yape").orEmpty()
+                "PLIN" -> payment.getString("plin").orEmpty()
+                "BANK" -> payment.getString("accountNumber").orEmpty()
+                else -> ""
+            }
+            require(destination.isNotBlank()) { "El metodo de retiro seleccionado no esta configurado." }
+
+            val available = balance.getDouble("available") ?: 0.0
+            val retained = balance.getDouble("retained") ?: 0.0
+            require(available >= request.amount) {
+                "Saldo insuficiente. Disponible: %.2f %s.".format(available, request.currency.name)
+            }
+
+            transaction.set(
+                walletRef,
+                mapOf(
+                    "userId" to uid,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                ),
+                SetOptions.merge()
+            )
+            transaction.set(
+                balanceRef,
+                mapOf(
+                    "currency" to request.currency.name,
+                    "available" to available - request.amount,
+                    "retained" to retained,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                ),
+                SetOptions.merge()
+            )
+            transaction.set(
+                withdrawalRef,
+                mapOf(
+                    "userId" to uid,
+                    "currency" to request.currency.name,
+                    "amount" to request.amount,
+                    "paymentMethod" to request.paymentMethodKey,
+                    "destination" to destination,
+                    "bankName" to payment.getString("bankName"),
+                    "status" to "COMPLETADO",
+                    "createdAt" to FieldValue.serverTimestamp()
+                )
+            )
+            transaction.set(
+                movementRef,
+                mapOf(
+                    "userId" to uid,
+                    "currency" to request.currency.name,
+                    "amount" to -request.amount,
+                    "operationType" to "RETIRO",
+                    "result" to "EXITOSO",
+                    "referenceType" to request.paymentMethodKey,
+                    "referenceId" to withdrawalRef.id,
                     "createdAt" to FieldValue.serverTimestamp()
                 )
             )

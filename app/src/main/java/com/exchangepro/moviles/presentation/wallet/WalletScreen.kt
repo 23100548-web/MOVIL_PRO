@@ -61,7 +61,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.exchangepro.moviles.data.repository.ExchangeRateRepository
+import com.exchangepro.moviles.data.repository.FirebasePaymentDataRepository
 import com.exchangepro.moviles.data.repository.FirebaseWalletRepository
+import com.exchangepro.moviles.data.repository.PaymentDestination
 import com.exchangepro.moviles.domain.model.CurrencyCode
 import com.exchangepro.moviles.domain.model.DepositAccount
 import com.exchangepro.moviles.domain.model.ExchangeRate
@@ -69,6 +71,7 @@ import com.exchangepro.moviles.domain.model.TopUpRequest
 import com.exchangepro.moviles.domain.model.Wallet
 import com.exchangepro.moviles.domain.model.WalletBalance
 import com.exchangepro.moviles.domain.model.WalletMovement
+import com.exchangepro.moviles.domain.model.WithdrawalRequest
 import com.exchangepro.moviles.ui.components.ExchangeCard
 import com.exchangepro.moviles.ui.components.PrimaryAction
 import com.exchangepro.moviles.ui.components.SecondaryAction
@@ -84,15 +87,18 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.abs
 
 @Composable
 fun WalletScreen() {
     val walletRepository = remember { FirebaseWalletRepository() }
+    val paymentRepository = remember { FirebasePaymentDataRepository() }
     val exchangeRateRepository = remember { ExchangeRateRepository() }
     val scope = rememberCoroutineScope()
 
     var wallet by remember { mutableStateOf(Wallet(userId = "", balances = emptyList())) }
     var movements by remember { mutableStateOf(emptyList<WalletMovement>()) }
+    var paymentDestinations by remember { mutableStateOf(emptyList<PaymentDestination>()) }
     var rates by remember { mutableStateOf(emptyList<ExchangeRate>()) }
     var loading by remember { mutableStateOf(true) }
     var message by remember { mutableStateOf<String?>(null) }
@@ -105,6 +111,9 @@ fun WalletScreen() {
             try {
                 wallet = walletRepository.getWallet()
                 movements = runCatching { walletRepository.getMovements() }.getOrDefault(emptyList())
+                paymentDestinations = runCatching {
+                    paymentRepository.get().availableDestinations()
+                }.getOrDefault(emptyList())
                 message = null
             } catch (error: Exception) {
                 wallet = Wallet(userId = "", balances = emptyList())
@@ -195,11 +204,22 @@ fun WalletScreen() {
     }
 
     if (showWithdraw) {
-        AlertDialog(
-            onDismissRequest = { showWithdraw = false },
-            title = { Text("Retirar Saldo") },
-            text = { Text("El flujo de retiro queda preparado para conectarlo a paymentData y solicitudes de retiro en Firestore.") },
-            confirmButton = { TextButton(onClick = { showWithdraw = false }) { Text("Entendido") } }
+        WithdrawDialog(
+            wallet = wallet,
+            destinations = paymentDestinations,
+            onDismiss = { showWithdraw = false },
+            onConfirm = { request ->
+                scope.launch {
+                    try {
+                        walletRepository.withdraw(request)
+                        showWithdraw = false
+                        message = "Retiro completado correctamente."
+                        refresh()
+                    } catch (error: Exception) {
+                        message = error.message ?: "No se pudo completar el retiro."
+                    }
+                }
+            }
         )
     }
 }
@@ -335,9 +355,10 @@ private fun MovementRow(movement: WalletMovement) {
                     Text(formatDate(it), color = ExchangeMuted, style = MaterialTheme.typography.bodySmall)
                 }
             }
+            val outgoing = movement.amount < 0.0
             Text(
-                "+${formatMoney(movement.amount, movement.currency)}",
-                color = ExchangePositive,
+                "${if (outgoing) "-" else "+"}${formatMoney(abs(movement.amount), movement.currency)}",
+                color = if (outgoing) ExchangeNegative else ExchangePositive,
                 fontWeight = FontWeight.Bold
             )
         }
@@ -492,6 +513,149 @@ private fun TopUpDialog(
                             }
                         })
                     }
+                }
+            }
+        },
+        containerColor = ExchangeSurface,
+        shape = RoundedCornerShape(18.dp)
+    )
+}
+
+@Composable
+private fun WithdrawDialog(
+    wallet: Wallet,
+    destinations: List<PaymentDestination>,
+    onDismiss: () -> Unit,
+    onConfirm: (WithdrawalRequest) -> Unit
+) {
+    var currency by remember { mutableStateOf<CurrencyCode?>(null) }
+    var amount by remember { mutableStateOf("") }
+    var selectedDestination by remember { mutableStateOf<PaymentDestination?>(null) }
+    var currencyMenuOpen by remember { mutableStateOf(false) }
+    var destinationMenuOpen by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val selectedBalance = wallet.balances.firstOrNull { it.currency == currency }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {},
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Output, contentDescription = null, tint = ExchangePrimaryLight)
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Retirar Saldo", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                        Text("Envia fondos a un metodo registrado", color = ExchangeMuted)
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Cerrar")
+                    }
+                }
+
+                if (destinations.isEmpty()) {
+                    ExchangeCard {
+                        Text("Primero registra Yape, Plin o una cuenta bancaria en Datos de pago.", color = ExchangeNegative)
+                    }
+                }
+
+                Column {
+                    Text("Moneda", fontWeight = FontWeight.SemiBold)
+                    Box {
+                        OutlinedTextField(
+                            value = currency?.let { "${it.name} - ${currencyName(it)}" }.orEmpty(),
+                            onValueChange = {},
+                            modifier = Modifier.fillMaxWidth(),
+                            readOnly = true,
+                            placeholder = { Text("Seleccionar moneda") },
+                            trailingIcon = { Icon(Icons.Default.KeyboardArrowDown, contentDescription = null) }
+                        )
+                        Box(Modifier.matchParentSize().clickable { currencyMenuOpen = true })
+                        DropdownMenu(expanded = currencyMenuOpen, onDismissRequest = { currencyMenuOpen = false }) {
+                            wallet.balances.forEach { balance ->
+                                DropdownMenuItem(
+                                    text = { Text("${balance.currency.name} - Disponible: ${formatMoney(balance.available, balance.currency)}") },
+                                    onClick = {
+                                        currency = balance.currency
+                                        currencyMenuOpen = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    selectedBalance?.let {
+                        Text("Disponible: ${formatMoney(it.available, it.currency)}", color = ExchangeMuted, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+
+                Column {
+                    Text("Monto", fontWeight = FontWeight.SemiBold)
+                    OutlinedTextField(
+                        value = amount,
+                        onValueChange = { amount = it.filter { char -> char.isDigit() || char == '.' } },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        placeholder = { Text("0.00") }
+                    )
+                }
+
+                Column {
+                    Text("Destino", fontWeight = FontWeight.SemiBold)
+                    Box {
+                        OutlinedTextField(
+                            value = selectedDestination?.let { "${it.label} - ${it.detail}" }.orEmpty(),
+                            onValueChange = {},
+                            modifier = Modifier.fillMaxWidth(),
+                            readOnly = true,
+                            placeholder = { Text("Seleccionar metodo") },
+                            trailingIcon = { Icon(Icons.Default.KeyboardArrowDown, contentDescription = null) }
+                        )
+                        Box(
+                            Modifier
+                                .matchParentSize()
+                                .clickable(enabled = destinations.isNotEmpty()) { destinationMenuOpen = true }
+                        )
+                        DropdownMenu(expanded = destinationMenuOpen, onDismissRequest = { destinationMenuOpen = false }) {
+                            destinations.forEach { destination ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Column {
+                                            Text(destination.label)
+                                            Text(destination.detail, color = ExchangeMuted, style = MaterialTheme.typography.bodySmall)
+                                        }
+                                    },
+                                    onClick = {
+                                        selectedDestination = destination
+                                        destinationMenuOpen = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                error?.let { Text(it, color = ExchangeNegative, style = MaterialTheme.typography.bodySmall) }
+
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismiss) { Text("Cancelar") }
+                    Spacer(Modifier.width(8.dp))
+                    PrimaryAction("Confirmar Retiro", {
+                        val parsedAmount = amount.toDoubleOrNull()
+                        when {
+                            currency == null -> error = "Selecciona una moneda."
+                            parsedAmount == null || parsedAmount <= 0.0 -> error = "El monto debe ser mayor a 0."
+                            selectedBalance == null || parsedAmount > selectedBalance.available -> error = "Saldo disponible insuficiente."
+                            selectedDestination == null -> error = "Selecciona un destino."
+                            else -> onConfirm(
+                                WithdrawalRequest(
+                                    currency = currency!!,
+                                    amount = parsedAmount,
+                                    paymentMethodKey = selectedDestination!!.key
+                                )
+                            )
+                        }
+                    })
                 }
             }
         },

@@ -108,6 +108,12 @@ data class Transaction(
     val voucherAttachmentId: String? = null
 )
 
+data class WithdrawalRequest(
+    val currency: CurrencyCode,
+    val amount: Double,
+    val paymentMethodKey: String
+)
+
 data class PaymentData(
     val id: String,
     val userId: String,

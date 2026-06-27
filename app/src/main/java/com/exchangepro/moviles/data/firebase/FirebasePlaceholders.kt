@@ -13,4 +13,5 @@ object FirebaseCollections {
     const val TOP_UPS = "topUps"
     const val BALANCES = "balances"
     const val ATTACHMENTS = "attachments"
+    const val WITHDRAWALS = "withdrawals"
 }

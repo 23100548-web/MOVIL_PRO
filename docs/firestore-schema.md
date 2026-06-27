@@ -155,6 +155,43 @@ Mantiene el historial de entradas y salidas de cada usuario.
 }
 ```
 
+## paymentData
+
+Cada usuario mantiene un unico documento con sus destinos de cobro.
+
+```text
+paymentData/{userId}
+```
+
+```json
+{
+  "userId": "firebaseAuthUid",
+  "yape": "999888777",
+  "plin": "",
+  "bankName": "BCP",
+  "accountNumber": "19112345678012",
+  "cci": "00219112345678012000",
+  "updatedAt": "serverTimestamp"
+}
+```
+
+## withdrawals
+
+Los retiros del prototipo se completan de forma atomica: descuentan el saldo,
+crean un retiro y agregan un movimiento negativo.
+
+```json
+{
+  "userId": "firebaseAuthUid",
+  "currency": "PEN",
+  "amount": 100.00,
+  "paymentMethod": "YAPE",
+  "destination": "999888777",
+  "status": "COMPLETADO",
+  "createdAt": "serverTimestamp"
+}
+```
+
 ## Nota sobre saldos
 
 Cuando se conecte Firebase real, los cambios de saldo deben hacerse con transacciones de Firestore o Cloud Functions. No conviene modificar saldos desde varias pantallas sin una operacion atomica.
