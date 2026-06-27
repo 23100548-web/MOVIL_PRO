@@ -12,10 +12,5 @@ object FirebaseCollections {
     const val WALLET_MOVEMENTS = "walletMovements"
     const val TOP_UPS = "topUps"
     const val BALANCES = "balances"
-}
-
-object FirebaseStoragePaths {
-    const val PROFILE_PHOTOS = "profilePhotos"
-    const val VOUCHERS = "vouchers"
-    const val DISPUTE_EVIDENCE = "disputeEvidence"
+    const val ATTACHMENTS = "attachments"
 }

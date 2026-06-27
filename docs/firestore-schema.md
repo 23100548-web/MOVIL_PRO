@@ -95,15 +95,32 @@ Equivale a `Transacciones` y `ComprobantesPago`.
 }
 ```
 
-## Storage
+## Adjuntos de imagen para el prototipo academico
 
-Los archivos no van en Firestore. Firestore solo guarda URL y metadatos.
+El proyecto usa `attachments/{attachmentId}` porque Cloud Storage requiere
+facturacion en proyectos nuevos. Esta solucion es solo para la demostracion
+universitaria.
 
-```text
-profilePhotos/{userId}/profile.jpg
-vouchers/{transactionId}/{fileName}
-disputeEvidence/{disputeId}/{fileName}
+Las imagenes se reducen automaticamente a JPEG de 500 KB como maximo y se
+guardan en un documento independiente para no cargar sus bytes al consultar
+usuarios, transacciones o disputas.
+
+```json
+{
+  "ownerId": "firebaseAuthUid",
+  "type": "VOUCHER | DISPUTE_EVIDENCE | PROFILE_PHOTO",
+  "relatedId": "transactionId | disputeId | userId",
+  "contentType": "image/jpeg",
+  "imageData": "Firestore Blob",
+  "size": 421350,
+  "width": 1280,
+  "height": 720,
+  "createdAt": "serverTimestamp"
+}
 ```
+
+No se admiten PDF ni archivos grandes. En produccion estos adjuntos deben
+migrarse a un servicio especializado de almacenamiento de archivos.
 
 ## topUps
 

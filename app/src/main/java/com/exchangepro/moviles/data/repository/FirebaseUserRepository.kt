@@ -54,7 +54,8 @@ class FirebaseUserRepository(
                 documentNumber = document.getString("documentNumber").orEmpty(),
                 reputation = document.getDouble("reputation") ?: 5.0,
                 totalRatings = document.getLong("totalRatings")?.toInt() ?: 0,
-                photoUrl = document.getString("photoUrl")
+                photoUrl = document.getString("photoUrl"),
+                photoAttachmentId = document.getString("photoAttachmentId")
             ),
             names = names,
             lastNames = lastNames

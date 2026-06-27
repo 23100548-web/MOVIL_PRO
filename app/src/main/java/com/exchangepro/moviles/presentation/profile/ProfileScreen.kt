@@ -1,5 +1,9 @@
 package com.exchangepro.moviles.presentation.profile
 
+import android.graphics.BitmapFactory
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -8,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -41,9 +46,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.exchangepro.moviles.data.image.ImageCompressor
+import com.exchangepro.moviles.data.repository.FirebaseAttachmentRepository
 import com.exchangepro.moviles.data.repository.FirebaseUserProfile
 import com.exchangepro.moviles.data.repository.FirebaseUserRepository
 import com.exchangepro.moviles.ui.components.ExchangeCard
@@ -59,13 +69,16 @@ import kotlinx.coroutines.launch
 @Composable
 fun ProfileScreen() {
     val repository = remember { FirebaseUserRepository() }
+    val attachmentRepository = remember { FirebaseAttachmentRepository() }
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var profile by remember { mutableStateOf<FirebaseUserProfile?>(null) }
     var names by remember { mutableStateOf("") }
     var lastNames by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
-    var photoChanged by remember { mutableStateOf(false) }
+    var photoBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var uploadingPhoto by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(true) }
     var saving by remember { mutableStateOf(false) }
 
@@ -76,13 +89,42 @@ fun ProfileScreen() {
         phone = value.user.phone.filter(Char::isDigit).take(9)
     }
 
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null && !uploadingPhoto) {
+            scope.launch {
+                uploadingPhoto = true
+                try {
+                    val compressed = ImageCompressor.compress(context, uri)
+                    val attachmentId = attachmentRepository.uploadProfilePhoto(compressed)
+                    photoBytes = attachmentRepository.getImage(attachmentId)
+                    applyProfile(repository.getCurrentProfile())
+                    message = "Foto de perfil actualizada."
+                } catch (error: Exception) {
+                    message = error.message ?: "No se pudo guardar la foto."
+                } finally {
+                    uploadingPhoto = false
+                }
+            }
+        }
+    }
+
     LaunchedEffect(Unit) {
         try {
-            applyProfile(repository.getCurrentProfile())
+            val loaded = repository.getCurrentProfile()
+            applyProfile(loaded)
+            loaded.user.photoAttachmentId?.let { attachmentId ->
+                photoBytes = runCatching { attachmentRepository.getImage(attachmentId) }.getOrNull()
+            }
         } catch (error: Exception) {
             message = "No se pudo cargar el perfil: ${error.message.orEmpty()}"
         } finally {
             loading = false
+        }
+    }
+
+    val profileBitmap = remember(photoBytes) {
+        photoBytes?.let { bytes ->
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
         }
     }
 
@@ -118,12 +160,20 @@ fun ProfileScreen() {
                                     .clip(CircleShape)
                                     .background(ExchangePrimary.copy(alpha = 0.20f))
                                     .clickable {
-                                        photoChanged = true
-                                        message = "La foto se conectara en la etapa de Firebase Storage."
+                                        if (!uploadingPhoto) photoPicker.launch("image/*")
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Default.Person, contentDescription = null, tint = Color.White, modifier = Modifier.size(38.dp))
+                                if (profileBitmap != null) {
+                                    Image(
+                                        bitmap = profileBitmap,
+                                        contentDescription = "Foto de perfil",
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                } else {
+                                    Icon(Icons.Default.Person, contentDescription = null, tint = Color.White, modifier = Modifier.size(38.dp))
+                                }
                                 Box(
                                     modifier = Modifier
                                         .align(Alignment.BottomEnd)
@@ -202,12 +252,11 @@ fun ProfileScreen() {
                         Spacer(Modifier.height(18.dp))
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                             TextButton(
-                                enabled = !saving,
+                                enabled = !saving && !uploadingPhoto,
                                 onClick = {
                                     names = currentProfile.names
                                     lastNames = currentProfile.lastNames
                                     phone = user.phone.filter(Char::isDigit).take(9)
-                                    photoChanged = false
                                     message = null
                                 }
                             ) {

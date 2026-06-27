@@ -402,7 +402,8 @@ class FirebaseTransactionRepository(
             fundsOwnerId = getString("fundsOwnerId").orEmpty(),
             fundsRecipientId = getString("fundsRecipientId").orEmpty(),
             heldCurrency = enumValue<CurrencyCode>("heldCurrency") ?: fromCurrency,
-            heldAmount = getDouble("heldAmount") ?: 0.0
+            heldAmount = getDouble("heldAmount") ?: 0.0,
+            voucherAttachmentId = getString("voucherAttachmentId")
         )
     }
 

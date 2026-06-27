@@ -15,7 +15,8 @@ data class AppUser(
     val documentNumber: String,
     val reputation: Double,
     val totalRatings: Int,
-    val photoUrl: String? = null
+    val photoUrl: String? = null,
+    val photoAttachmentId: String? = null
 )
 
 data class WalletBalance(
@@ -103,7 +104,8 @@ data class Transaction(
     val fundsOwnerId: String = "",
     val fundsRecipientId: String = "",
     val heldCurrency: CurrencyCode = currency,
-    val heldAmount: Double = operationAmount
+    val heldAmount: Double = operationAmount,
+    val voucherAttachmentId: String? = null
 )
 
 data class PaymentData(

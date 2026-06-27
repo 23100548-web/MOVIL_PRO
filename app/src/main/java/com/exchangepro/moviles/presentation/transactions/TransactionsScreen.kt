@@ -1,5 +1,9 @@
 package com.exchangepro.moviles.presentation.transactions
 
+import android.graphics.BitmapFactory
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -42,8 +46,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.exchangepro.moviles.data.image.ImageCompressor
+import com.exchangepro.moviles.data.repository.FirebaseAttachmentRepository
 import com.exchangepro.moviles.data.repository.FirebaseTransactionRepository
 import com.exchangepro.moviles.domain.model.Transaction
 import com.exchangepro.moviles.domain.model.TransactionStatus
@@ -63,6 +72,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun TransactionsScreen() {
     val repository = remember { FirebaseTransactionRepository() }
+    val attachmentRepository = remember { FirebaseAttachmentRepository() }
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val currentUserId = remember { repository.currentUserId() }
     var transactions by remember { mutableStateOf(emptyList<Transaction>()) }
@@ -70,6 +81,9 @@ fun TransactionsScreen() {
     var message by remember { mutableStateOf<String?>(null) }
     var actionFailed by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(true) }
+    var uploadingVoucher by remember { mutableStateOf(false) }
+    var voucherPreview by remember { mutableStateOf<ByteArray?>(null) }
+    var loadingPreview by remember { mutableStateOf(false) }
 
     suspend fun reloadTransactions() {
         transactions = repository.getMyTransactions()
@@ -86,6 +100,28 @@ fun TransactionsScreen() {
             } catch (error: Exception) {
                 actionFailed = true
                 message = error.message ?: "No se pudo actualizar la transaccion."
+            }
+        }
+    }
+
+    val voucherPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        val transaction = selected
+        if (uri != null && transaction != null && !uploadingVoucher) {
+            scope.launch {
+                uploadingVoucher = true
+                try {
+                    val compressed = ImageCompressor.compress(context, uri)
+                    attachmentRepository.uploadVoucher(transaction.id, compressed)
+                    reloadTransactions()
+                    actionFailed = false
+                    message = "Comprobante comprimido y registrado correctamente."
+                    selected = null
+                } catch (error: Exception) {
+                    actionFailed = true
+                    message = error.message ?: "No se pudo guardar el comprobante."
+                } finally {
+                    uploadingVoucher = false
+                }
             }
         }
     }
@@ -135,10 +171,27 @@ fun TransactionsScreen() {
         TransactionDetailDialog(
             trx = trx,
             currentUserId = currentUserId,
+            uploadingVoucher = uploadingVoucher,
             onDismiss = { selected = null },
             onUploadVoucher = {
-                performAction("Pago marcado como enviado. La contraparte debe liberar los fondos.") {
-                    repository.markPaymentSent(trx.id)
+                if (!uploadingVoucher) {
+                    voucherPicker.launch("image/*")
+                }
+            },
+            onViewVoucher = {
+                val attachmentId = trx.voucherAttachmentId
+                if (attachmentId != null && !loadingPreview) {
+                    scope.launch {
+                        loadingPreview = true
+                        try {
+                            voucherPreview = attachmentRepository.getImage(attachmentId)
+                        } catch (error: Exception) {
+                            actionFailed = true
+                            message = error.message ?: "No se pudo abrir el comprobante."
+                        } finally {
+                            loadingPreview = false
+                        }
+                    }
                 }
             },
             onRelease = {
@@ -156,6 +209,32 @@ fun TransactionsScreen() {
                     repository.openDispute(trx.id)
                 }
             }
+        )
+    }
+
+    voucherPreview?.let { bytes ->
+        val bitmap = remember(bytes) {
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+        }
+        AlertDialog(
+            onDismissRequest = { voucherPreview = null },
+            title = { Text("Comprobante") },
+            text = {
+                if (bitmap != null) {
+                    Image(
+                        bitmap = bitmap,
+                        contentDescription = "Comprobante de pago",
+                        modifier = Modifier.fillMaxWidth().height(420.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                } else {
+                    Text("No se pudo decodificar la imagen.")
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { voucherPreview = null }) { Text("Cerrar") }
+            },
+            containerColor = ExchangeSurface
         )
     }
 }
@@ -181,8 +260,10 @@ private fun TransactionCard(trx: Transaction, onClick: () -> Unit) {
 private fun TransactionDetailDialog(
     trx: Transaction,
     currentUserId: String,
+    uploadingVoucher: Boolean,
     onDismiss: () -> Unit,
     onUploadVoucher: () -> Unit,
+    onViewVoucher: () -> Unit,
     onRelease: () -> Unit,
     onCancel: () -> Unit,
     onDispute: () -> Unit
@@ -255,7 +336,7 @@ private fun TransactionDetailDialog(
                     }
                 }
 
-                if (trx.voucherUrl != null || trx.status == TransactionStatus.PAGADO) {
+                if (trx.voucherAttachmentId != null || trx.status == TransactionStatus.PAGADO) {
                     item {
                         ExchangeCard {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -264,7 +345,11 @@ private fun TransactionDetailDialog(
                                 Text("Comprobante de Pago", fontWeight = FontWeight.Bold)
                             }
                             Spacer(Modifier.height(10.dp))
-                            Text("Pago marcado como enviado. El comprobante se conectara con Firebase Storage.", color = ExchangeMuted)
+                            Text("Comprobante de imagen registrado para revision.", color = ExchangeMuted)
+                            if (trx.voucherAttachmentId != null) {
+                                Spacer(Modifier.height(10.dp))
+                                SecondaryAction("Ver comprobante", onViewVoucher, Modifier.fillMaxWidth())
+                            }
                         }
                     }
                 }
@@ -286,7 +371,11 @@ private fun TransactionDetailDialog(
                         Spacer(Modifier.height(12.dp))
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             if (canConfirmPayment && trx.status == TransactionStatus.PENDIENTE_PAGO) {
-                                PrimaryAction("Confirmar pago enviado", onUploadVoucher, Modifier.fillMaxWidth())
+                                PrimaryAction(
+                                    if (uploadingVoucher) "Comprimiendo imagen..." else "Seleccionar comprobante",
+                                    onUploadVoucher,
+                                    Modifier.fillMaxWidth()
+                                )
                             }
                             if (canReleaseFunds && trx.status == TransactionStatus.PAGADO) {
                                 Button(
