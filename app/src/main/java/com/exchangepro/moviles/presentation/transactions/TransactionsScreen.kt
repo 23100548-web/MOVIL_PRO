@@ -1,5 +1,9 @@
 package com.exchangepro.moviles.presentation.transactions
 
+import android.graphics.BitmapFactory
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -20,31 +24,38 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CloudUpload
-import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.exchangepro.moviles.data.repository.MockExchangeRepository
+import com.exchangepro.moviles.data.image.ImageCompressor
+import com.exchangepro.moviles.data.repository.FirebaseAttachmentRepository
+import com.exchangepro.moviles.data.repository.FirebaseRatingRepository
+import com.exchangepro.moviles.data.repository.FirebaseTransactionRepository
 import com.exchangepro.moviles.domain.model.Transaction
 import com.exchangepro.moviles.domain.model.TransactionStatus
 import com.exchangepro.moviles.ui.components.ExchangeCard
@@ -58,12 +69,77 @@ import com.exchangepro.moviles.ui.theme.ExchangePositive
 import com.exchangepro.moviles.ui.theme.ExchangePrimary
 import com.exchangepro.moviles.ui.theme.ExchangePrimaryLight
 import com.exchangepro.moviles.ui.theme.ExchangeSurface
+import kotlinx.coroutines.launch
 
 @Composable
 fun TransactionsScreen() {
-    val transactions = remember { mutableStateListOf<Transaction>().apply { addAll(MockExchangeRepository.transactions) } }
+    val repository = remember { FirebaseTransactionRepository() }
+    val attachmentRepository = remember { FirebaseAttachmentRepository() }
+    val ratingRepository = remember { FirebaseRatingRepository() }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val currentUserId = remember { repository.currentUserId() }
+    var transactions by remember { mutableStateOf(emptyList<Transaction>()) }
     var selected by remember { mutableStateOf<Transaction?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
+    var actionFailed by remember { mutableStateOf(false) }
+    var loading by remember { mutableStateOf(true) }
+    var uploadingVoucher by remember { mutableStateOf(false) }
+    var voucherPreview by remember { mutableStateOf<ByteArray?>(null) }
+    var loadingPreview by remember { mutableStateOf(false) }
+    var ratingTarget by remember { mutableStateOf<Transaction?>(null) }
+
+    suspend fun reloadTransactions() {
+        transactions = repository.getMyTransactions()
+    }
+
+    fun performAction(successMessage: String, action: suspend () -> Unit) {
+        scope.launch {
+            try {
+                action()
+                reloadTransactions()
+                actionFailed = false
+                message = successMessage
+                selected = null
+            } catch (error: Exception) {
+                actionFailed = true
+                message = error.message ?: "No se pudo actualizar la transaccion."
+            }
+        }
+    }
+
+    val voucherPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        val transaction = selected
+        if (uri != null && transaction != null && !uploadingVoucher) {
+            scope.launch {
+                uploadingVoucher = true
+                try {
+                    val compressed = ImageCompressor.compress(context, uri)
+                    attachmentRepository.uploadVoucher(transaction.id, compressed)
+                    reloadTransactions()
+                    actionFailed = false
+                    message = "Comprobante comprimido y registrado correctamente."
+                    selected = null
+                } catch (error: Exception) {
+                    actionFailed = true
+                    message = error.message ?: "No se pudo guardar el comprobante."
+                } finally {
+                    uploadingVoucher = false
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        try {
+            reloadTransactions()
+        } catch (error: Exception) {
+            actionFailed = true
+            message = error.message ?: "No se pudieron cargar las transacciones."
+        } finally {
+            loading = false
+        }
+    }
 
     LazyColumn(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
@@ -71,40 +147,135 @@ fun TransactionsScreen() {
             Text("Revisa pagos, comprobantes y liberacion de fondos.", color = ExchangeMuted)
         }
         message?.let {
-            item { Text(it, color = ExchangePositive, style = MaterialTheme.typography.bodySmall) }
+            item { Text(it, color = if (actionFailed) ExchangeNegative else ExchangePositive, style = MaterialTheme.typography.bodySmall) }
         }
-        items(transactions, key = { it.id }) { trx ->
-            TransactionCard(
-                trx = trx,
-                onClick = { selected = trx }
-            )
+        if (loading) {
+            item {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                    CircularProgressIndicator(color = ExchangePrimary)
+                }
+            }
+        } else if (transactions.isEmpty()) {
+            item {
+                ExchangeCard {
+                    Text("Aun no tienes transacciones registradas.", color = ExchangeMuted)
+                }
+            }
+        } else {
+            items(transactions, key = { it.id }) { trx ->
+                TransactionCard(
+                    trx = trx,
+                    onClick = { selected = trx }
+                )
+            }
         }
     }
 
     selected?.let { trx ->
         TransactionDetailDialog(
             trx = trx,
+            currentUserId = currentUserId,
+            uploadingVoucher = uploadingVoucher,
             onDismiss = { selected = null },
             onUploadVoucher = {
-                transactions.replaceTransaction(trx.copy(status = TransactionStatus.PAGADO, voucherUrl = "mock://voucher/${trx.id}.png"))
-                message = "Comprobante registrado. El vendedor debe liberar los fondos."
-                selected = null
+                if (!uploadingVoucher) {
+                    voucherPicker.launch("image/*")
+                }
+            },
+            onViewVoucher = {
+                val attachmentId = trx.voucherAttachmentId
+                if (attachmentId != null && !loadingPreview) {
+                    scope.launch {
+                        loadingPreview = true
+                        try {
+                            voucherPreview = attachmentRepository.getImage(attachmentId)
+                        } catch (error: Exception) {
+                            actionFailed = true
+                            message = error.message ?: "No se pudo abrir el comprobante."
+                        } finally {
+                            loadingPreview = false
+                        }
+                    }
+                }
             },
             onRelease = {
-                transactions.replaceTransaction(trx.copy(status = TransactionStatus.COMPLETADO))
-                message = "Fondos liberados. Transaccion completada."
-                selected = null
+                performAction("Fondos liberados. Transaccion completada.") {
+                    repository.complete(trx.id)
+                }
             },
             onCancel = {
-                transactions.replaceTransaction(trx.copy(status = TransactionStatus.CANCELADO))
-                message = "Transaccion cancelada. La oferta volveria al mercado."
-                selected = null
+                performAction("Transaccion cancelada. El monto regreso a la oferta.") {
+                    repository.cancel(trx.id)
+                }
             },
             onDispute = {
-                transactions.replaceTransaction(trx.copy(status = TransactionStatus.EN_DISPUTA))
-                message = "Disputa abierta para ${trx.code}."
-                selected = null
+                performAction("Transaccion marcada en disputa: ${trx.code}.") {
+                    repository.openDispute(trx.id)
+                }
+            },
+            onRate = {
+                scope.launch {
+                    try {
+                        if (ratingRepository.hasRated(trx.id)) {
+                            actionFailed = true
+                            message = "Ya calificaste esta transaccion."
+                            selected = null
+                        } else {
+                            selected = null
+                            ratingTarget = trx
+                        }
+                    } catch (error: Exception) {
+                        actionFailed = true
+                        message = error.message ?: "No se pudo verificar la calificacion."
+                    }
+                }
             }
+        )
+    }
+
+    ratingTarget?.let { trx ->
+        RatingDialog(
+            transactionCode = trx.code,
+            onDismiss = { ratingTarget = null },
+            onSubmit = { score, comment ->
+                scope.launch {
+                    try {
+                        ratingRepository.submit(trx.id, score, comment)
+                        actionFailed = false
+                        message = "Calificacion registrada. Gracias por tu opinion."
+                        ratingTarget = null
+                    } catch (error: Exception) {
+                        actionFailed = true
+                        message = error.message ?: "No se pudo guardar la calificacion."
+                    }
+                }
+            }
+        )
+    }
+
+    voucherPreview?.let { bytes ->
+        val bitmap = remember(bytes) {
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+        }
+        AlertDialog(
+            onDismissRequest = { voucherPreview = null },
+            title = { Text("Comprobante") },
+            text = {
+                if (bitmap != null) {
+                    Image(
+                        bitmap = bitmap,
+                        contentDescription = "Comprobante de pago",
+                        modifier = Modifier.fillMaxWidth().height(420.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                } else {
+                    Text("No se pudo decodificar la imagen.")
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { voucherPreview = null }) { Text("Cerrar") }
+            },
+            containerColor = ExchangeSurface
         )
     }
 }
@@ -121,7 +292,7 @@ private fun TransactionCard(trx: Transaction, onClick: () -> Unit) {
         }
         Spacer(Modifier.height(10.dp))
         Text("Monto: %.2f ${trx.currency}".format(trx.operationAmount))
-        Text("Total a pagar: S/ %.2f".format(trx.totalToPay), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Total a pagar: %.2f ${trx.toCurrency}".format(trx.totalToPay), color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text("Toca para ver detalle", color = ExchangeMuted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
     }
 }
@@ -129,15 +300,20 @@ private fun TransactionCard(trx: Transaction, onClick: () -> Unit) {
 @Composable
 private fun TransactionDetailDialog(
     trx: Transaction,
+    currentUserId: String,
+    uploadingVoucher: Boolean,
     onDismiss: () -> Unit,
     onUploadVoucher: () -> Unit,
+    onViewVoucher: () -> Unit,
     onRelease: () -> Unit,
     onCancel: () -> Unit,
-    onDispute: () -> Unit
+    onDispute: () -> Unit,
+    onRate: () -> Unit
 ) {
-    val currentUserId = MockExchangeRepository.currentUser.id
     val isBuyer = trx.buyerId == currentUserId
     val isSeller = trx.sellerId == currentUserId
+    val canConfirmPayment = trx.fundsRecipientId == currentUserId
+    val canReleaseFunds = trx.fundsOwnerId == currentUserId
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -176,7 +352,7 @@ private fun TransactionDetailDialog(
                         Text("Informacion General", fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(10.dp))
                         DetailRow("Monto operacion", "%.2f ${trx.currency}".format(trx.operationAmount))
-                        DetailRow("Total a pagar", "S/ %.2f".format(trx.totalToPay))
+                        DetailRow("Total a pagar", "%.2f ${trx.toCurrency}".format(trx.totalToPay))
                         DetailRow("Metodo", trx.paymentMethod)
                         DetailRow("Oferta", "#${trx.offerId}")
                     }
@@ -191,18 +367,18 @@ private fun TransactionDetailDialog(
                     }
                 }
 
-                if (isBuyer && trx.status == TransactionStatus.PENDIENTE_PAGO) {
+                if (canConfirmPayment && trx.status == TransactionStatus.PENDIENTE_PAGO) {
                     item {
                         ExchangeCard {
                             Text("Pasos para completar el pago", fontWeight = FontWeight.Bold)
                             Spacer(Modifier.height(10.dp))
                             StepRow("1", "Realiza el pago", "Transfiere el monto exacto al vendedor usando ${trx.paymentMethod}.")
-                            StepRow("2", "Sube el comprobante", "Adjunta la captura o PDF para que el vendedor confirme.")
+                            StepRow("2", "Confirma el envio", "Marca el pago como enviado para que la contraparte pueda liberar los fondos.")
                         }
                     }
                 }
 
-                if (trx.voucherUrl != null || trx.status == TransactionStatus.PAGADO) {
+                if (trx.voucherAttachmentId != null || trx.status == TransactionStatus.PAGADO) {
                     item {
                         ExchangeCard {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -211,18 +387,22 @@ private fun TransactionDetailDialog(
                                 Text("Comprobante de Pago", fontWeight = FontWeight.Bold)
                             }
                             Spacer(Modifier.height(10.dp))
-                            Text("Comprobante registrado para revision.", color = ExchangeMuted)
+                            Text("Comprobante de imagen registrado para revision.", color = ExchangeMuted)
+                            if (trx.voucherAttachmentId != null) {
+                                Spacer(Modifier.height(10.dp))
+                                SecondaryAction("Ver comprobante", onViewVoucher, Modifier.fillMaxWidth())
+                            }
                         }
                     }
                 }
 
-                if (isSeller && trx.status == TransactionStatus.PAGADO) {
+                if (canReleaseFunds && trx.status == TransactionStatus.PAGADO) {
                     item {
                         ExchangeCard {
                             Text("Pasos para liberar fondos", fontWeight = FontWeight.Bold)
                             Spacer(Modifier.height(10.dp))
-                            StepRow("1", "Verifica comprobante", "Revisa monto, cuenta y referencia.")
-                            StepRow("2", "Libera fondos", "Confirma que recibiste el pago.")
+                            StepRow("1", "Verifica el pago", "Revisa monto, cuenta y referencia.")
+                            StepRow("2", "Libera fondos", "Confirma que recibiste la contraprestacion.")
                         }
                     }
                 }
@@ -232,10 +412,14 @@ private fun TransactionDetailDialog(
                         Text("Acciones disponibles", color = ExchangeMuted, style = MaterialTheme.typography.bodySmall)
                         Spacer(Modifier.height(12.dp))
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            if (isBuyer && trx.status == TransactionStatus.PENDIENTE_PAGO) {
-                                PrimaryAction("Subir comprobante", onUploadVoucher, Modifier.fillMaxWidth())
+                            if (canConfirmPayment && trx.status == TransactionStatus.PENDIENTE_PAGO) {
+                                PrimaryAction(
+                                    if (uploadingVoucher) "Comprimiendo imagen..." else "Seleccionar comprobante",
+                                    onUploadVoucher,
+                                    Modifier.fillMaxWidth()
+                                )
                             }
-                            if (isSeller && trx.status == TransactionStatus.PAGADO) {
+                            if (canReleaseFunds && trx.status == TransactionStatus.PAGADO) {
                                 Button(
                                     onClick = onRelease,
                                     modifier = Modifier.fillMaxWidth(),
@@ -249,6 +433,8 @@ private fun TransactionDetailDialog(
                             }
                             if (trx.status == TransactionStatus.PENDIENTE_PAGO || trx.status == TransactionStatus.PAGADO) {
                                 SecondaryAction("Abrir disputa", onDispute, Modifier.fillMaxWidth())
+                            }
+                            if (trx.status == TransactionStatus.PENDIENTE_PAGO) {
                                 Button(
                                     onClick = onCancel,
                                     modifier = Modifier.fillMaxWidth(),
@@ -261,7 +447,7 @@ private fun TransactionDetailDialog(
                                 }
                             }
                             if (trx.status == TransactionStatus.COMPLETADO) {
-                                Text("Transaccion completada. Luego agregaremos calificacion.", color = ExchangeMuted)
+                                PrimaryAction("Calificar usuario", onRate, Modifier.fillMaxWidth())
                             }
                             if (trx.status == TransactionStatus.EN_DISPUTA) {
                                 Text("La transaccion esta en disputa.", color = ExchangeMuted)
@@ -273,6 +459,54 @@ private fun TransactionDetailDialog(
         },
         containerColor = ExchangeSurface,
         shape = RoundedCornerShape(18.dp)
+    )
+}
+
+@Composable
+private fun RatingDialog(
+    transactionCode: String,
+    onDismiss: () -> Unit,
+    onSubmit: (Int, String) -> Unit
+) {
+    var score by remember { mutableStateOf(5) }
+    var comment by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Calificar $transactionCode") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Selecciona una puntuacion")
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    (1..5).forEach { value ->
+                        Button(
+                            onClick = { score = value },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (score == value) ExchangePrimary else ExchangeElevated
+                            ),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+                            modifier = Modifier.size(42.dp)
+                        ) {
+                            Text(value.toString())
+                        }
+                    }
+                }
+                OutlinedTextField(
+                    value = comment,
+                    onValueChange = { comment = it.take(300) },
+                    label = { Text("Comentario opcional") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSubmit(score, comment) }) { Text("Enviar") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        },
+        containerColor = ExchangeSurface
     )
 }
 
@@ -349,11 +583,6 @@ private fun DetailRow(label: String, value: String) {
         Text(label, color = ExchangeMuted)
         Text(value, fontWeight = FontWeight.SemiBold)
     }
-}
-
-private fun MutableList<Transaction>.replaceTransaction(next: Transaction) {
-    val index = indexOfFirst { it.id == next.id }
-    if (index >= 0) this[index] = next
 }
 
 private fun statusLabel(status: TransactionStatus): String = when (status) {

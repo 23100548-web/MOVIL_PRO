@@ -46,6 +46,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.exchangepro.moviles.data.repository.FirebaseAuthRepository
+import com.exchangepro.moviles.data.repository.RegistrationData
+import com.exchangepro.moviles.domain.model.UserRole
 import com.exchangepro.moviles.presentation.navigation.Route
 import com.exchangepro.moviles.ui.components.ExchangeCard
 import com.exchangepro.moviles.ui.components.PrimaryAction
@@ -56,11 +59,14 @@ import com.exchangepro.moviles.ui.theme.ExchangePrimary
 
 @Composable
 fun LoginScreen(navController: NavController) {
+    val authRepository = remember { FirebaseAuthRepository() }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
     var submitted by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    var messageIsSuccess by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(false) }
 
     AuthContainer {
         BrandHeader(
@@ -98,38 +104,82 @@ fun LoginScreen(navController: NavController) {
 
             message?.let {
                 Spacer(Modifier.height(12.dp))
-                Text(it, color = if (it.contains("iniciada", true)) ExchangePositive else ExchangeNegative, style = MaterialTheme.typography.bodySmall)
+                Text(it, color = if (messageIsSuccess) ExchangePositive else ExchangeNegative, style = MaterialTheme.typography.bodySmall)
             }
 
             Spacer(Modifier.height(18.dp))
             PrimaryAction(
-                "Iniciar Sesion",
+                if (isLoading) "Iniciando sesion..." else "Iniciar Sesion",
                 onClick = {
-                    submitted = true
-                    val cleanEmail = email.trim()
-                    if (isValidEmail(cleanEmail) && password.isNotBlank()) {
-                        message = "Sesion iniciada."
-                        val destination = if (cleanEmail.equals("admin@exchange-pro.com", ignoreCase = true)) {
-                            Route.AdminDashboard.value
+                    if (!isLoading) {
+                        submitted = true
+                        val cleanEmail = email.trim()
+                        if (isValidEmail(cleanEmail) && password.isNotBlank()) {
+                            isLoading = true
+                            message = null
+                            authRepository.signIn(cleanEmail, password) { result ->
+                                isLoading = false
+                                result.fold(
+                                    onSuccess = { role ->
+                                        messageIsSuccess = true
+                                        message = "Sesion iniciada."
+                                        val destination = if (role == UserRole.ADMIN) {
+                                            Route.AdminDashboard.value
+                                        } else {
+                                            Route.Home.value
+                                        }
+                                        navController.navigate(destination) {
+                                            popUpTo(Route.Login.value) { inclusive = true }
+                                        }
+                                    },
+                                    onFailure = { error ->
+                                        messageIsSuccess = false
+                                        message = error.message ?: "No se pudo iniciar sesion."
+                                    }
+                                )
+                            }
                         } else {
-                            Route.Home.value
+                            messageIsSuccess = false
+                            message = "Revisa tus credenciales."
                         }
-                        navController.navigate(destination) {
-                            popUpTo(Route.Login.value) { inclusive = true }
-                        }
-                    } else {
-                        message = "Revisa tus credenciales."
                     }
                 },
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(Modifier.height(10.dp))
-            TextButton(onClick = { message = "Recuperacion preparada para Firebase Auth." }, modifier = Modifier.fillMaxWidth()) {
+            TextButton(
+                enabled = !isLoading,
+                onClick = {
+                    submitted = true
+                    val cleanEmail = email.trim()
+                    if (isValidEmail(cleanEmail)) {
+                        isLoading = true
+                        message = null
+                        authRepository.sendPasswordReset(cleanEmail) { result ->
+                            isLoading = false
+                            result.fold(
+                                onSuccess = {
+                                    messageIsSuccess = true
+                                    message = "Te enviamos un enlace para restablecer tu contrasena."
+                                },
+                                onFailure = { error ->
+                                    messageIsSuccess = false
+                                    message = error.message ?: "No se pudo enviar el correo."
+                                }
+                            )
+                        }
+                    } else {
+                        messageIsSuccess = false
+                        message = "Ingresa primero un correo valido."
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Text("Olvidaste tu contrasena?")
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                 Text("No tienes cuenta?", color = ExchangeMuted)
-                TextButton(onClick = { navController.navigate(Route.Register.value) }) {
+                TextButton(enabled = !isLoading, onClick = { navController.navigate(Route.Register.value) }) {
                     Text("Registrate")
                 }
             }
@@ -139,6 +189,7 @@ fun LoginScreen(navController: NavController) {
 
 @Composable
 fun RegisterScreen(navController: NavController) {
+    val authRepository = remember { FirebaseAuthRepository() }
     var names by remember { mutableStateOf("") }
     var lastNames by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
@@ -150,6 +201,8 @@ fun RegisterScreen(navController: NavController) {
     var showConfirmPassword by remember { mutableStateOf(false) }
     var submitted by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    var messageIsSuccess by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(false) }
 
     AuthContainer(scroll = true) {
         BrandHeader(
@@ -202,34 +255,62 @@ fun RegisterScreen(navController: NavController) {
 
             message?.let {
                 Spacer(Modifier.height(12.dp))
-                Text(it, color = if (it.contains("creada", true)) ExchangePositive else ExchangeNegative, style = MaterialTheme.typography.bodySmall)
+                Text(it, color = if (messageIsSuccess) ExchangePositive else ExchangeNegative, style = MaterialTheme.typography.bodySmall)
             }
 
             Spacer(Modifier.height(18.dp))
             PrimaryAction(
-                "Crear Cuenta",
+                if (isLoading) "Creando cuenta..." else "Crear Cuenta",
                 onClick = {
-                    submitted = true
-                    val valid = names.isNotBlank() &&
-                        lastNames.isNotBlank() &&
-                        isValidEmail(email) &&
-                        phone.length == 9 &&
-                        document.length == 8 &&
-                        password.length >= 6 &&
-                        password == confirmPassword
+                    if (!isLoading) {
+                        submitted = true
+                        val valid = names.isNotBlank() &&
+                            lastNames.isNotBlank() &&
+                            isValidEmail(email) &&
+                            phone.length == 9 &&
+                            document.length == 8 &&
+                            password.length >= 6 &&
+                            password == confirmPassword
 
-                    if (valid) {
-                        message = "Cuenta creada exitosamente. Luego se guardara en Firebase Auth y users."
-                        navController.navigate(Route.Login.value)
-                    } else {
-                        message = "Completa los datos requeridos."
+                        if (valid) {
+                            isLoading = true
+                            message = null
+                            authRepository.register(
+                                RegistrationData(
+                                    names = names,
+                                    lastNames = lastNames,
+                                    email = email,
+                                    phone = phone,
+                                    documentNumber = document,
+                                    password = password
+                                )
+                            ) { result ->
+                                isLoading = false
+                                result.fold(
+                                    onSuccess = {
+                                        messageIsSuccess = true
+                                        message = "Cuenta creada exitosamente."
+                                        navController.navigate(Route.Login.value) {
+                                            popUpTo(Route.Register.value) { inclusive = true }
+                                        }
+                                    },
+                                    onFailure = { error ->
+                                        messageIsSuccess = false
+                                        message = error.message ?: "No se pudo crear la cuenta."
+                                    }
+                                )
+                            }
+                        } else {
+                            messageIsSuccess = false
+                            message = "Completa los datos requeridos."
+                        }
                     }
                 },
                 modifier = Modifier.fillMaxWidth()
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                 Text("Ya tienes cuenta?", color = ExchangeMuted)
-                TextButton(onClick = { navController.navigate(Route.Login.value) }) {
+                TextButton(enabled = !isLoading, onClick = { navController.navigate(Route.Login.value) }) {
                     Text("Inicia sesion")
                 }
             }

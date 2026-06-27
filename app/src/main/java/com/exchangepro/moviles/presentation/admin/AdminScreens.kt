@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -21,33 +20,27 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Feedback
 import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.Feedback
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.PendingActions
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,6 +51,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.exchangepro.moviles.data.repository.AdminDashboardData
+import com.exchangepro.moviles.data.repository.AdminDisputeRecord
+import com.exchangepro.moviles.data.repository.AdminFeedbackRecord
+import com.exchangepro.moviles.data.repository.AdminReportRow
+import com.exchangepro.moviles.data.repository.FirebaseAdminRepository
 import com.exchangepro.moviles.presentation.navigation.Route
 import com.exchangepro.moviles.ui.components.ExchangeCard
 import com.exchangepro.moviles.ui.components.PrimaryAction
@@ -71,106 +69,265 @@ import com.exchangepro.moviles.ui.theme.ExchangePositive
 import com.exchangepro.moviles.ui.theme.ExchangePrimary
 import com.exchangepro.moviles.ui.theme.ExchangeSurface
 import com.exchangepro.moviles.ui.theme.ExchangeWarning
+import kotlinx.coroutines.launch
 
 private data class AdminStat(
     val label: String,
     val value: String,
-    val detail: String,
     val icon: ImageVector,
     val color: Color
 )
 
-private data class AdminDispute(
-    val id: String,
-    val transactionId: String,
-    val reason: String,
-    val reporter: String,
-    val buyer: String,
-    val seller: String,
-    val amount: String,
-    val state: String,
-    val evidence: String,
-    val description: String,
-    val resolution: String = ""
-)
-
-private data class AdminFeedback(
-    val id: String,
-    val type: String,
-    val title: String,
-    val user: String,
-    val email: String,
-    val state: String,
-    val message: String,
-    val response: String = ""
-)
-
-private data class AdminNotification(
-    val title: String,
-    val body: String,
-    val time: String,
-    val unread: Boolean
-)
-
 @Composable
 fun AdminDashboardScreen(navController: NavController) {
+    val repository = remember { FirebaseAdminRepository() }
+    var data by remember { mutableStateOf(AdminDashboardData()) }
+    var loading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        runCatching { repository.dashboard() }
+            .onSuccess { data = it }
+            .onFailure { error = it.message ?: "No se pudo cargar el dashboard." }
+        loading = false
+    }
     val stats = listOf(
-        AdminStat("Usuarios Registrados", "128", "+12 esta semana", Icons.Default.Groups, ExchangePrimary),
-        AdminStat("Ofertas Activas", "34", "PEN, USD y EUR", Icons.Default.Sell, ExchangeAccent),
-        AdminStat("Transacciones Completadas", "286", "S/ 94,250 movidos", Icons.Default.SwapHoriz, ExchangePositive),
-        AdminStat("Disputas Pendientes", "3", "Requieren revision", Icons.Default.Gavel, ExchangeNegative)
+        AdminStat("Usuarios registrados", data.users.toString(), Icons.Default.Groups, ExchangePrimary),
+        AdminStat("Ofertas activas", data.activeOffers.toString(), Icons.Default.Sell, ExchangeAccent),
+        AdminStat("Transacciones completadas", data.completedTransactions.toString(), Icons.Default.SwapHoriz, ExchangePositive),
+        AdminStat("Disputas pendientes", data.pendingDisputes.toString(), Icons.Default.Gavel, ExchangeNegative)
     )
 
-    AdminPage(
-        title = "Dashboard",
-        subtitle = "Panel de control administrativo"
-    ) {
+    AdminPage("Dashboard", "Panel de control administrativo") {
+        if (loading) item { ExchangeCard { Text("Cargando datos reales...", color = ExchangeMuted) } }
+        error?.let { item { ErrorCard(it) } }
+        items(stats) { stat -> AdminStatCard(stat) }
         item {
             ExchangeCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Refresh, contentDescription = null, tint = ExchangeAccent)
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        "ESTADO DE LA PLATAFORMA: OPERATIVO  -  USUARIOS ACTIVOS: 128  -  OFERTAS: 34  -  DISPUTAS: 3",
-                        color = ExchangeMuted,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-        }
-        items(stats) { stat ->
-            AdminStatCard(stat)
-        }
-        item {
-            ExchangeCard {
-                Text("Acciones rapidas", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("Acciones rapidas", fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    PrimaryAction(
-                        "Revisar disputas",
-                        onClick = { navController.navigate(Route.AdminDisputes.value) },
-                        modifier = Modifier.weight(1f)
-                    )
-                    SecondaryAction(
-                        "Reportes",
-                        onClick = { navController.navigate(Route.AdminReports.value) },
-                        modifier = Modifier.weight(1f)
-                    )
+                    PrimaryAction("Revisar disputas", { navController.navigate(Route.AdminDisputes.value) }, Modifier.weight(1f))
+                    SecondaryAction("Reportes", { navController.navigate(Route.AdminReports.value) }, Modifier.weight(1f))
                 }
-            }
-        }
-        item {
-            ExchangeCard {
-                Text("Actividad Reciente", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(10.dp))
-                ActivityRow("Nuevo usuario registrado", "hace 2 min", ExchangePrimary)
-                ActivityRow("Transaccion #1284 completada", "hace 8 min", ExchangePositive)
-                ActivityRow("Disputa #42 resuelta", "hace 15 min", ExchangePositive)
-                ActivityRow("Feedback recibido de usuario", "hace 35 min", ExchangeWarning)
             }
         }
     }
+}
+
+@Composable
+fun AdminDisputesScreen() {
+    val repository = remember { FirebaseAdminRepository() }
+    val scope = rememberCoroutineScope()
+    var disputes by remember { mutableStateOf(emptyList<AdminDisputeRecord>()) }
+    var filter by remember { mutableStateOf("Pendientes") }
+    var selected by remember { mutableStateOf<AdminDisputeRecord?>(null) }
+    var message by remember { mutableStateOf<String?>(null) }
+
+    suspend fun reload() { disputes = repository.disputes() }
+    LaunchedEffect(Unit) {
+        runCatching { reload() }.onFailure { message = it.message ?: "No se pudieron cargar las disputas." }
+    }
+    selected?.let { dispute ->
+        ResolveDisputeDialog(
+            dispute = dispute,
+            onDismiss = { selected = null },
+            onResolve = { release, note ->
+                scope.launch {
+                    runCatching { repository.resolveDispute(dispute.id, release, note); reload() }
+                        .onSuccess { message = "Disputa resuelta y fondos actualizados."; selected = null }
+                        .onFailure { message = it.message ?: "No se pudo resolver la disputa." }
+                }
+            }
+        )
+    }
+    val visible = disputes.filter {
+        filter == "Todos" || (filter == "Pendientes" && it.status == "PENDIENTE") ||
+            (filter == "Resueltas" && it.status == "RESUELTA")
+    }
+    AdminPage("Gestion de Disputas", "Revisa evidencias y resuelve fondos retenidos") {
+        message?.let { item { ExchangeCard { Text(it, color = ExchangeMuted) } } }
+        item { AdminFilterRow(listOf("Todos", "Pendientes", "Resueltas"), filter) { filter = it } }
+        if (visible.isEmpty()) item { EmptyAdminState(Icons.Default.Gavel, "No hay disputas en este filtro") }
+        items(visible, key = { it.id }) { dispute ->
+            ExchangeCard {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column(Modifier.weight(1f)) {
+                        StatusPill(if (dispute.status == "PENDIENTE") "Pendiente" else "Resuelta")
+                        Text(dispute.reason, fontWeight = FontWeight.Bold)
+                        Text(dispute.transactionCode, color = ExchangeMuted)
+                    }
+                    if (dispute.status == "PENDIENTE") SecondaryAction("Resolver", { selected = dispute })
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(dispute.description, color = ExchangeMuted)
+                Text("Monto retenido: %.2f %s".format(dispute.amount, dispute.currency))
+                Text("Evidencias: ${dispute.evidenceCount}", color = ExchangeMuted)
+                if (dispute.resolution.isNotBlank()) Text("Fallo: ${dispute.resolution}", color = ExchangePositive)
+            }
+        }
+    }
+}
+
+@Composable
+fun AdminFeedbackScreen() {
+    val repository = remember { FirebaseAdminRepository() }
+    val scope = rememberCoroutineScope()
+    var feedback by remember { mutableStateOf(emptyList<AdminFeedbackRecord>()) }
+    var filter by remember { mutableStateOf("Todos") }
+    var selected by remember { mutableStateOf<AdminFeedbackRecord?>(null) }
+    var message by remember { mutableStateOf<String?>(null) }
+    suspend fun reload() { feedback = repository.feedback() }
+    LaunchedEffect(Unit) {
+        runCatching { reload() }.onFailure { message = it.message ?: "No se pudo cargar el feedback." }
+    }
+    selected?.let { item ->
+        ResponseDialog(item, { selected = null }) { response ->
+            scope.launch {
+                runCatching { repository.respondFeedback(item.id, response); reload() }
+                    .onSuccess { message = "Respuesta enviada al usuario."; selected = null }
+                    .onFailure { message = it.message ?: "No se pudo responder." }
+            }
+        }
+    }
+    val visible = feedback.filter { filter == "Todos" || it.type == filter }
+    AdminPage("Buzon de Feedback", "Sugerencias y reportes reales de usuarios") {
+        message?.let { item { ExchangeCard { Text(it, color = ExchangeMuted) } } }
+        item { AdminFilterRow(listOf("Todos", "RECOMENDACION", "REPORTE_ERROR"), filter) { filter = it } }
+        if (visible.isEmpty()) item { EmptyAdminState(Icons.Default.Feedback, "No hay feedback en este filtro") }
+        items(visible, key = { it.id }) { item ->
+            ExchangeCard {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column(Modifier.weight(1f)) {
+                        Text(item.title, fontWeight = FontWeight.Bold)
+                        Text(item.type.replace("_", " "), color = ExchangeMuted)
+                    }
+                    StatusPill(item.status)
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(item.description)
+                if (item.adminResponse.isNotBlank()) Text("Respuesta: ${item.adminResponse}", color = ExchangePositive)
+                else {
+                    Spacer(Modifier.height(8.dp))
+                    SecondaryAction("Responder", { selected = item })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AdminReportsScreen() {
+    val repository = remember { FirebaseAdminRepository() }
+    val scope = rememberCoroutineScope()
+    var type by remember { mutableStateOf("Transacciones") }
+    var currency by remember { mutableStateOf("Todas") }
+    var status by remember { mutableStateOf("Todos") }
+    var rows by remember { mutableStateOf<List<AdminReportRow>?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    AdminPage("Reportes", "Consulta información actual de Firestore") {
+        item {
+            ExchangeCard {
+                Text("Tipo de reporte", fontWeight = FontWeight.Bold)
+                AdminFilterRow(listOf("Usuarios", "Ofertas", "Transacciones", "Recargas", "Disputas"), type) { type = it }
+                Text("Moneda", fontWeight = FontWeight.Bold)
+                AdminFilterRow(listOf("Todas", "PEN", "USD", "EUR"), currency) { currency = it }
+                Text("Estado", fontWeight = FontWeight.Bold)
+                AdminFilterRow(listOf("Todos", "ACTIVA", "PENDIENTE", "COMPLETADO"), status) { status = it }
+                PrimaryAction(
+                    "Generar reporte",
+                    {
+                        scope.launch {
+                            runCatching { repository.report(type, currency, status) }
+                                .onSuccess { rows = it; error = null }
+                                .onFailure { error = it.message ?: "No se pudo generar el reporte." }
+                        }
+                    },
+                    Modifier.fillMaxWidth()
+                )
+            }
+        }
+        error?.let { item { ErrorCard(it) } }
+        rows?.let { result ->
+            item {
+                ExchangeCard {
+                    Text("Resultados (${result.size})", fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    ReportRow("ID", "Usuario", "Monto", "Estado", true)
+                    result.forEach { ReportRow(it.id, it.owner, it.amount, it.status) }
+                }
+            }
+        } ?: item { EmptyAdminState(Icons.Default.BarChart, "Selecciona filtros y genera un reporte") }
+    }
+}
+
+@Composable
+fun AdminNotificationsScreen() {
+    val repository = remember { FirebaseAdminRepository() }
+    var disputes by remember { mutableStateOf(emptyList<AdminDisputeRecord>()) }
+    var feedback by remember { mutableStateOf(emptyList<AdminFeedbackRecord>()) }
+    var error by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        runCatching {
+            disputes = repository.disputes().filter { it.status == "PENDIENTE" }
+            feedback = repository.feedback().filter { it.status == "PENDIENTE" }
+        }.onFailure { error = it.message ?: "No se pudieron cargar las alertas." }
+    }
+    AdminPage("Notificaciones", "Alertas administrativas del sistema") {
+        error?.let { item { ErrorCard(it) } }
+        items(disputes, key = { "d-${it.id}" }) {
+            AlertCard("Nueva disputa pendiente", "${it.transactionCode}: ${it.reason}", ExchangeNegative)
+        }
+        items(feedback, key = { "f-${it.id}" }) {
+            AlertCard("Feedback pendiente", it.title, ExchangeWarning)
+        }
+        if (disputes.isEmpty() && feedback.isEmpty() && error == null) {
+            item { EmptyAdminState(Icons.Default.Notifications, "No hay alertas administrativas pendientes") }
+        }
+    }
+}
+
+@Composable
+private fun ResolveDisputeDialog(
+    dispute: AdminDisputeRecord,
+    onDismiss: () -> Unit,
+    onResolve: (Boolean, String) -> Unit
+) {
+    var release by remember { mutableStateOf(true) }
+    var note by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Resolver ${dispute.transactionCode}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(dispute.reason)
+                FilterChip(release, { release = true }, { Text("Liberar a la contraparte") })
+                FilterChip(!release, { release = false }, { Text("Devolver al propietario") })
+                OutlinedTextField(note, { note = it.take(500) }, label = { Text("Fundamento del fallo") })
+            }
+        },
+        confirmButton = { TextButton({ if (note.isNotBlank()) onResolve(release, note) }) { Text("Resolver") } },
+        dismissButton = { TextButton(onDismiss) { Text("Cancelar") } }
+    )
+}
+
+@Composable
+private fun ResponseDialog(item: AdminFeedbackRecord, onDismiss: () -> Unit, onSend: (String) -> Unit) {
+    var response by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Responder feedback") },
+        text = {
+            Column {
+                Text(item.title, fontWeight = FontWeight.Bold)
+                Text(item.description, color = ExchangeMuted)
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(response, { response = it.take(500) }, label = { Text("Respuesta") })
+            }
+        },
+        confirmButton = { TextButton({ if (response.isNotBlank()) onSend(response) }) { Text("Enviar") } },
+        dismissButton = { TextButton(onDismiss) { Text("Cancelar") } }
+    )
 }
 
 @Composable
@@ -180,17 +337,10 @@ private fun AdminPage(
     content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit
 ) {
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        item {
-            Column {
-                Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text(subtitle, color = ExchangeMuted)
-            }
-        }
+        item { Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); Text(subtitle, color = ExchangeMuted) }
         content()
         item { Spacer(Modifier.height(12.dp)) }
     }
@@ -199,695 +349,68 @@ private fun AdminPage(
 @Composable
 private fun AdminStatCard(stat: AdminStat) {
     ExchangeCard {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    stat.value,
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = stat.color
-                )
-                Text(stat.label, fontWeight = FontWeight.SemiBold)
-                Text(stat.detail, color = ExchangeMuted, style = MaterialTheme.typography.bodySmall)
-            }
+        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+            Column { Text(stat.value, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = stat.color); Text(stat.label) }
             IconBadge(stat.icon, stat.color)
         }
     }
 }
 
 @Composable
-private fun ActivityRow(text: String, time: String, color: Color) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(8.dp)
-                .clip(CircleShape)
-                .background(color)
-        )
-        Spacer(Modifier.width(10.dp))
-        Text(text, modifier = Modifier.weight(1f))
-        Text(time, color = ExchangeMuted, style = MaterialTheme.typography.bodySmall)
+private fun AdminFilterRow(options: List<String>, selected: String, onSelected: (String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        options.chunked(2).forEach { optionsRow ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                optionsRow.forEach {
+                    FilterChip(selected == it, { onSelected(it) }, { Text(it, maxLines = 1) }, modifier = Modifier.weight(1f))
+                }
+                if (optionsRow.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
     }
 }
 
 @Composable
 private fun IconBadge(icon: ImageVector, color: Color) {
-    Box(
-        modifier = Modifier
-            .size(46.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(color.copy(alpha = 0.16f)),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(icon, contentDescription = null, tint = color)
+    Box(Modifier.size(46.dp).clip(RoundedCornerShape(12.dp)).background(color.copy(alpha = .16f)), contentAlignment = Alignment.Center) {
+        Icon(icon, null, tint = color)
     }
 }
 
 @Composable
-fun AdminDisputesScreen() {
-    val disputes = remember { mutableStateListOf(*demoDisputes().toTypedArray()) }
-    var filter by remember { mutableStateOf("Pendientes") }
-    var selected by remember { mutableStateOf<AdminDispute?>(null) }
-    val visible = disputes.filter { filter == "Todos" || it.state == filter }
-
-    selected?.let { dispute ->
-        ResolveDisputeDialog(
-            dispute = dispute,
-            onDismiss = { selected = null },
-            onResolve = { decision, note ->
-                val index = disputes.indexOfFirst { it.id == dispute.id }
-                if (index >= 0) {
-                    disputes[index] = dispute.copy(
-                        state = "Resueltas",
-                        resolution = "$decision: $note"
-                    )
-                }
-                selected = null
-            }
-        )
-    }
-
-    AdminPage(
-        title = "Gestion de Disputas",
-        subtitle = "Revisa y resuelve disputas pendientes"
-    ) {
-        item {
-            AdminFilterRow(
-                options = listOf("Todos", "Pendientes", "Resueltas"),
-                selected = filter,
-                onSelected = { filter = it }
-            )
-        }
-        items(visible) { dispute ->
-            AdminDisputeCard(dispute, onResolve = { selected = dispute })
-        }
-    }
-}
-
-@Composable
-fun AdminFeedbackScreen() {
-    val feedback = remember { mutableStateListOf(*demoFeedback().toTypedArray()) }
-    var typeFilter by remember { mutableStateOf("Todos") }
-    var selected by remember { mutableStateOf<AdminFeedback?>(null) }
-    val visible = feedback.filter { typeFilter == "Todos" || it.type == typeFilter }
-
-    selected?.let { item ->
-        RespondFeedbackDialog(
-            feedback = item,
-            onDismiss = { selected = null },
-            onSend = { response ->
-                val index = feedback.indexOfFirst { it.id == item.id }
-                if (index >= 0) {
-                    feedback[index] = item.copy(state = "REVISADO", response = response)
-                }
-                selected = null
-            }
-        )
-    }
-
-    AdminPage(
-        title = "Buzon de Feedback",
-        subtitle = "Revisa sugerencias y reportes de error"
-    ) {
-        item {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                MiniStat(
-                    "Total",
-                    feedback.size.toString(),
-                    Icons.Default.Feedback,
-                    ExchangePrimary,
-                    Modifier.weight(1f)
-                )
-                MiniStat(
-                    "Pendientes",
-                    feedback.count { it.state != "REVISADO" }.toString(),
-                    Icons.Default.PendingActions,
-                    ExchangeWarning,
-                    Modifier.weight(1f)
-                )
-            }
-        }
-        item {
-            AdminFilterRow(
-                options = listOf("Todos", "RECOMENDACION", "BUG_REPORT"),
-                selected = typeFilter,
-                onSelected = { typeFilter = it }
-            )
-        }
-        items(visible) { item ->
-            AdminFeedbackCard(item, onRespond = { selected = item })
-        }
-    }
-}
-
-@Composable
-private fun MiniStat(
-    label: String,
-    value: String,
-    icon: ImageVector,
-    color: Color,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = ExchangeSurface),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.35f)),
-        shape = RoundedCornerShape(14.dp)
-    ) {
-        Column(Modifier.padding(14.dp)) {
-            Icon(icon, contentDescription = null, tint = color)
-            Spacer(Modifier.height(8.dp))
-            Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text(label, color = ExchangeMuted, style = MaterialTheme.typography.bodySmall)
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun AdminFilterRow(
-    options: List<String>,
-    selected: String,
-    onSelected: (String) -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        options.chunked(2).forEach { row ->
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                row.forEach { option ->
-                    FilterChip(
-                        selected = selected == option,
-                        onClick = { onSelected(option) },
-                        label = { Text(option, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                if (row.size == 1) {
-                    Spacer(Modifier.weight(1f))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AdminDisputeCard(dispute: AdminDispute, onResolve: () -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-
-    ExchangeCard(modifier = Modifier.clickable { expanded = !expanded }) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top
-        ) {
-            Row(Modifier.weight(1f), verticalAlignment = Alignment.Top) {
-                InitialCircle("#${dispute.id}", ExchangePrimary)
-                Spacer(Modifier.width(12.dp))
-                Column {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        StatusPill(dispute.state)
-                        Text(
-                            "Tx ${dispute.transactionId}",
-                            color = ExchangeMuted,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                    Text(dispute.reason, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                    Text("Reportado por ${dispute.reporter}", color = ExchangeMuted)
-                }
-            }
-            if (dispute.state == "Pendientes") {
-                SecondaryAction("Resolver", onClick = onResolve)
-            }
-        }
-
-        if (expanded) {
-            Spacer(Modifier.height(14.dp))
-            HorizontalDivider(color = ExchangeElevated)
-            Spacer(Modifier.height(12.dp))
-            DetailLine("Comprador", dispute.buyer)
-            DetailLine("Vendedor", dispute.seller)
-            DetailLine("Monto", dispute.amount)
-            DetailLine("Evidencia", dispute.evidence)
-            Text(dispute.description, color = ExchangeMuted, modifier = Modifier.padding(top = 8.dp))
-            if (dispute.resolution.isNotBlank()) {
-                Spacer(Modifier.height(10.dp))
-                Text(dispute.resolution, color = ExchangePositive, fontWeight = FontWeight.SemiBold)
-            }
-        }
-    }
-}
-
-@Composable
-private fun AdminFeedbackCard(item: AdminFeedback, onRespond: () -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    val color = if (item.type == "BUG_REPORT") ExchangeNegative else ExchangePrimary
-
-    ExchangeCard(modifier = Modifier.clickable { expanded = !expanded }) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top
-        ) {
-            Row(Modifier.weight(1f), verticalAlignment = Alignment.Top) {
-                InitialCircle(item.user.take(1).uppercase(), color)
-                Spacer(Modifier.width(12.dp))
-                Column {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        StatusPill(if (item.type == "BUG_REPORT") "Bug" else "Sugerencia")
-                        StatusPill(item.state)
-                    }
-                    Text(item.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "${item.user} - ${item.email}",
-                        color = ExchangeMuted,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-            if (item.state != "REVISADO") {
-                SecondaryAction("Responder", onClick = onRespond)
-            }
-        }
-
-        if (expanded) {
-            Spacer(Modifier.height(14.dp))
-            HorizontalDivider(color = ExchangeElevated)
-            Spacer(Modifier.height(12.dp))
-            Text(item.message, color = ExchangeMuted)
-            if (item.response.isNotBlank()) {
-                Spacer(Modifier.height(10.dp))
-                Text("Respuesta admin", fontWeight = FontWeight.Bold, color = ExchangePositive)
-                Text(item.response, color = ExchangeMuted)
-            }
-        }
-    }
-}
-
-@Composable
-private fun ResolveDisputeDialog(
-    dispute: AdminDispute,
-    onDismiss: () -> Unit,
-    onResolve: (String, String) -> Unit
-) {
-    var decision by remember { mutableStateOf("Liberar fondos al comprador") }
-    var note by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Resolver Disputa ${dispute.id}") },
-        text = {
-            Column {
-                Text(dispute.reason, fontWeight = FontWeight.Bold)
-                Text("Transaccion ${dispute.transactionId}", color = ExchangeMuted)
-                Spacer(Modifier.height(12.dp))
-                AdminFilterRow(
-                    options = listOf("Liberar fondos al comprador", "Devolver al vendedor"),
-                    selected = decision,
-                    onSelected = { decision = it }
-                )
-                Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = note,
-                    onValueChange = { note = it.take(500) },
-                    label = { Text("Observacion") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 110.dp)
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { if (note.isNotBlank()) onResolve(decision, note) }) {
-                Text("Emitir fallo")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancelar")
-            }
-        }
-    )
-}
-
-@Composable
-private fun RespondFeedbackDialog(
-    feedback: AdminFeedback,
-    onDismiss: () -> Unit,
-    onSend: (String) -> Unit
-) {
-    var response by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Responder Comentario") },
-        text = {
-            Column {
-                Text(feedback.title, fontWeight = FontWeight.Bold)
-                Text(feedback.message, color = ExchangeMuted)
-                Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = response,
-                    onValueChange = { response = it.take(500) },
-                    label = { Text("Tu respuesta") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 120.dp)
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { if (response.isNotBlank()) onSend(response) }) {
-                Text("Enviar respuesta")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancelar")
-            }
-        }
-    )
-}
-
-@Composable
-private fun DetailLine(label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(label, color = ExchangeMuted)
-        Text(value, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-@Composable
-private fun InitialCircle(text: String, color: Color) {
-    Box(
-        modifier = Modifier
-            .size(48.dp)
-            .clip(CircleShape)
-            .background(color),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(text, color = Color.White, fontWeight = FontWeight.Bold)
-    }
-}
-
-private fun demoDisputes() = listOf(
-    AdminDispute(
-        id = "42",
-        transactionId = "#1284",
-        reason = "Pago no confirmado",
-        reporter = "Ana Torres",
-        buyer = "Ana Torres",
-        seller = "Luis Chang",
-        amount = "S/ 1,200.00",
-        state = "Pendientes",
-        evidence = "voucher-yape-1284.png",
-        description = "El comprador indica que realizo el pago por Yape, pero el vendedor aun no libera los fondos."
-    ),
-    AdminDispute(
-        id = "43",
-        transactionId = "#1285",
-        reason = "Datos bancarios incorrectos",
-        reporter = "Gustavo Ramirez",
-        buyer = "Luis Chang",
-        seller = "Gustavo Ramirez",
-        amount = "$ 350.00",
-        state = "Pendientes",
-        evidence = "captura-transferencia.png",
-        description = "La transferencia fue enviada a una cuenta distinta a la registrada en datos de pago."
-    ),
-    AdminDispute(
-        id = "41",
-        transactionId = "#1278",
-        reason = "Comprobante validado",
-        reporter = "Maria Silva",
-        buyer = "Maria Silva",
-        seller = "Ana Torres",
-        amount = "S/ 540.00",
-        state = "Resueltas",
-        evidence = "voucher-bcp.png",
-        description = "El comprobante fue validado y se libero el saldo.",
-        resolution = "Liberar fondos al comprador: evidencia correcta."
-    )
-)
-
-private fun demoFeedback() = listOf(
-    AdminFeedback(
-        id = "F-01",
-        type = "RECOMENDACION",
-        title = "Agregar filtro por banco",
-        user = "Ana Torres",
-        email = "ana@demo.com",
-        state = "PENDIENTE",
-        message = "Seria util filtrar ofertas por metodo de pago o banco para encontrar operaciones mas rapido."
-    ),
-    AdminFeedback(
-        id = "F-02",
-        type = "BUG_REPORT",
-        title = "No abre comprobante",
-        user = "Luis Chang",
-        email = "luis@demo.com",
-        state = "PENDIENTE",
-        message = "Al intentar ver el comprobante desde transacciones, la vista se queda cargando."
-    ),
-    AdminFeedback(
-        id = "F-03",
-        type = "RECOMENDACION",
-        title = "Notificar tasa favorable",
-        user = "Maria Silva",
-        email = "maria@demo.com",
-        state = "REVISADO",
-        message = "Me gustaria recibir alertas cuando la tasa baje de cierto valor.",
-        response = "La sugerencia queda registrada para el modulo de notificaciones."
-    )
-)
-
-@Composable
-fun AdminReportsScreen() {
-    var type by remember { mutableStateOf("Transacciones") }
-    var currency by remember { mutableStateOf("Todas") }
-    var state by remember { mutableStateOf("Todos") }
-    var generated by remember { mutableStateOf(false) }
-
-    AdminPage(
-        title = "Reportes",
-        subtitle = "Genera y exporta reportes del sistema"
-    ) {
-        item {
-            ExchangeCard {
-                Text("Tipo de reporte", fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(8.dp))
-                AdminFilterRow(
-                    listOf("Usuarios", "Ofertas", "Transacciones", "Recargas", "Disputas"),
-                    type
-                ) { type = it }
-                Spacer(Modifier.height(14.dp))
-                Text("Moneda", fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(8.dp))
-                AdminFilterRow(listOf("Todas", "PEN", "USD", "EUR"), currency) { currency = it }
-                Spacer(Modifier.height(14.dp))
-                Text("Estado", fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(8.dp))
-                AdminFilterRow(
-                    listOf("Todos", "ACTIVO", "PENDIENTE", "COMPLETADO"),
-                    state
-                ) { state = it }
-                Spacer(Modifier.height(16.dp))
-                PrimaryAction(
-                    "Generar Reporte",
-                    onClick = { generated = true },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
-        if (generated) {
-            item {
-                ExchangeCard {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(
-                                "Resultados",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text("$type - $currency - $state", color = ExchangeMuted)
-                        }
-                        OutlinedButton(
-                            onClick = { },
-                            border = BorderStroke(1.dp, ExchangeAccent),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = ExchangeAccent)
-                        ) {
-                            Icon(
-                                Icons.Default.Download,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text("Exportar")
-                        }
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    ReportRow("ID", "Usuario", "Monto", "Estado", header = true)
-                    ReportRow("#1284", "Ana Torres", "S/ 1,200", "COMPLETADO")
-                    ReportRow("#1285", "Luis Chang", "$ 350", "PENDIENTE")
-                    ReportRow("#1286", "Gustavo Ramirez", "S/ 780", "COMPLETADO")
-                }
-            }
-        } else {
-            item {
-                EmptyAdminState(Icons.Default.BarChart, "Selecciona filtros y genera un reporte")
-            }
-        }
-    }
-}
-
-@Composable
-fun AdminNotificationsScreen() {
-    val notifications = remember {
-        mutableStateListOf(*demoAdminNotifications().toTypedArray())
-    }
-
-    AdminPage(
-        title = "Notificaciones",
-        subtitle = "Alertas administrativas del sistema"
-    ) {
-        items(notifications) { notification ->
-            AdminNotificationCard(notification)
-        }
-    }
-}
-
-@Composable
-private fun AdminNotificationCard(notification: AdminNotification) {
+private fun AlertCard(title: String, body: String, color: Color) {
     ExchangeCard {
-        Row(verticalAlignment = Alignment.Top) {
-            IconBadge(
-                Icons.Default.Notifications,
-                if (notification.unread) ExchangeWarning else ExchangeMuted
-            )
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        notification.title,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f)
-                    )
-                    if (notification.unread) {
-                        StatusPill("Nuevo")
-                    }
-                }
-                Text(notification.body, color = ExchangeMuted)
-                Text(
-                    notification.time,
-                    color = ExchangeMuted,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconBadge(Icons.Default.Notifications, color); Spacer(Modifier.width(10.dp))
+            Column { Text(title, fontWeight = FontWeight.Bold); Text(body, color = ExchangeMuted) }
         }
     }
 }
 
 @Composable
-private fun ReportRow(
-    a: String,
-    b: String,
-    c: String,
-    d: String,
-    header: Boolean = false
-) {
-    val weight = if (header) FontWeight.Bold else FontWeight.Normal
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                if (header) ExchangeElevated else Color.Transparent,
-                RoundedCornerShape(6.dp)
-            )
-            .padding(horizontal = 8.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Text(a, modifier = Modifier.weight(0.8f), fontWeight = weight)
-        Text(
-            b,
-            modifier = Modifier.weight(1.4f),
-            fontWeight = weight,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Text(c, modifier = Modifier.weight(1f), fontWeight = weight)
-        Text(
-            d,
-            modifier = Modifier.weight(1.2f),
-            fontWeight = weight,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
+private fun ErrorCard(message: String) {
+    ExchangeCard { Text(message, color = ExchangeNegative) }
 }
 
 @Composable
 private fun EmptyAdminState(icon: ImageVector, text: String) {
     ExchangeCard {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 28.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Icon(icon, contentDescription = null, tint = ExchangeMuted, modifier = Modifier.size(48.dp))
-            Spacer(Modifier.height(10.dp))
-            Text(text, color = ExchangeMuted)
+        Column(Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(icon, null, tint = ExchangeMuted, modifier = Modifier.size(44.dp)); Text(text, color = ExchangeMuted)
         }
     }
 }
 
-private fun demoAdminNotifications() = listOf(
-    AdminNotification(
-        title = "Nueva disputa pendiente",
-        body = "La transaccion #1284 requiere revision del administrador.",
-        time = "hace 4 min",
-        unread = true
-    ),
-    AdminNotification(
-        title = "Feedback recibido",
-        body = "Un usuario reporto un posible problema con comprobantes.",
-        time = "hace 18 min",
-        unread = true
-    ),
-    AdminNotification(
-        title = "Reporte generado",
-        body = "El reporte de transacciones de hoy quedo disponible.",
-        time = "hace 1 h",
-        unread = false
-    )
-)
+@Composable
+private fun ReportRow(a: String, b: String, c: String, d: String, header: Boolean = false) {
+    val weight = if (header) FontWeight.Bold else FontWeight.Normal
+    Row(
+        Modifier.fillMaxWidth().background(if (header) ExchangeElevated else Color.Transparent).padding(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(a, Modifier.weight(.8f), fontWeight = weight)
+        Text(b, Modifier.weight(1.2f), fontWeight = weight, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(c, Modifier.weight(1f), fontWeight = weight)
+        Text(d, Modifier.weight(1f), fontWeight = weight, maxLines = 1)
+    }
+}

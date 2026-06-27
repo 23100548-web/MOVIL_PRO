@@ -1,5 +1,7 @@
 package com.exchangepro.moviles.presentation.disputes
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -30,10 +32,11 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,7 +44,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.exchangepro.moviles.data.repository.MockExchangeRepository
+import androidx.compose.ui.platform.LocalContext
+import com.exchangepro.moviles.data.image.CompressedImage
+import com.exchangepro.moviles.data.image.ImageCompressor
+import com.exchangepro.moviles.data.repository.FirebaseAttachmentRepository
+import com.exchangepro.moviles.data.repository.FirebaseDisputeRepository
+import com.exchangepro.moviles.data.repository.FirebaseTransactionRepository
 import com.exchangepro.moviles.domain.model.Dispute
 import com.exchangepro.moviles.domain.model.Transaction
 import com.exchangepro.moviles.domain.model.TransactionStatus
@@ -55,23 +63,52 @@ import com.exchangepro.moviles.ui.theme.ExchangePositive
 import com.exchangepro.moviles.ui.theme.ExchangePrimary
 import com.exchangepro.moviles.ui.theme.ExchangePrimaryLight
 import com.exchangepro.moviles.ui.theme.ExchangeWarning
+import kotlinx.coroutines.launch
 
 @Composable
 fun DisputesScreen() {
-    val disputes = remember { mutableStateListOf<Dispute>().apply { addAll(MockExchangeRepository.disputes) } }
-    val transactions = remember {
-        MockExchangeRepository.transactions.filter {
-            it.status != TransactionStatus.CANCELADO &&
-                it.status != TransactionStatus.COMPLETADO &&
-                it.status != TransactionStatus.EN_DISPUTA
-        }
-    }
-    var selectedTransaction by remember { mutableStateOf<Transaction?>(transactions.firstOrNull()) }
+    val disputeRepository = remember { FirebaseDisputeRepository() }
+    val transactionRepository = remember { FirebaseTransactionRepository() }
+    val attachmentRepository = remember { FirebaseAttachmentRepository() }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var disputes by remember { mutableStateOf(emptyList<Dispute>()) }
+    var transactions by remember { mutableStateOf(emptyList<Transaction>()) }
+    var selectedTransaction by remember { mutableStateOf<Transaction?>(null) }
     var reason by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
-    var evidenceCount by remember { mutableStateOf(0) }
+    var evidence by remember { mutableStateOf<CompressedImage?>(null) }
     var submitted by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    var saving by remember { mutableStateOf(false) }
+
+    suspend fun reload() {
+        transactions = transactionRepository.getMyTransactions().filter {
+            it.status == TransactionStatus.PENDIENTE_PAGO || it.status == TransactionStatus.PAGADO
+        }
+        disputes = disputeRepository.getMine()
+        if (selectedTransaction?.id !in transactions.map { it.id }) {
+            selectedTransaction = transactions.firstOrNull()
+        }
+    }
+
+    val evidencePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            scope.launch {
+                try {
+                    evidence = ImageCompressor.compress(context, uri)
+                    message = "Evidencia lista (${evidence!!.bytes.size / 1024} KB)."
+                } catch (error: Exception) {
+                    message = error.message ?: "No se pudo preparar la evidencia."
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        runCatching { reload() }
+            .onFailure { message = it.message ?: "No se pudieron cargar las disputas." }
+    }
 
     LazyColumn(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
@@ -140,9 +177,10 @@ fun DisputesScreen() {
 
                 Spacer(Modifier.height(12.dp))
 
-                EvidenceMockSection(
-                    evidenceCount = evidenceCount,
-                    onAddEvidence = { evidenceCount += 1 }
+                EvidenceSection(
+                    evidence = evidence,
+                    onAddEvidence = { evidencePicker.launch("image/*") },
+                    onRemoveEvidence = { evidence = null }
                 )
 
                 Spacer(Modifier.height(12.dp))
@@ -177,7 +215,7 @@ fun DisputesScreen() {
                             selectedTransaction = transactions.firstOrNull()
                             reason = ""
                             description = ""
-                            evidenceCount = 0
+                            evidence = null
                             submitted = false
                             message = null
                         }
@@ -185,7 +223,7 @@ fun DisputesScreen() {
                         Text("Cancelar")
                     }
                     Spacer(Modifier.width(8.dp))
-                    PrimaryAction("Abrir Disputa", {
+                    PrimaryAction(if (saving) "Abriendo..." else "Abrir Disputa", {
                         submitted = true
                         if (selectedTransaction == null) {
                             message = "Selecciona una transaccion."
@@ -193,21 +231,28 @@ fun DisputesScreen() {
                             message = "Completa el motivo de la disputa."
                         } else if (description.length < 10) {
                             message = "Agrega una descripcion mas detallada."
-                        } else {
-                            disputes.add(
-                                0,
-                                Dispute(
-                                    id = "disp_${disputes.size + 1}",
-                                    transactionCode = selectedTransaction!!.code,
-                                    reason = reason,
-                                    status = "PENDIENTE"
-                                )
-                            )
-                            message = "Disputa abierta. Transaccion congelada."
-                            reason = ""
-                            description = ""
-                            evidenceCount = 0
-                            submitted = false
+                        } else if (!saving) {
+                            saving = true
+                            scope.launch {
+                                try {
+                                    val disputeId = disputeRepository.create(
+                                        transactionId = selectedTransaction!!.id,
+                                        reason = reason,
+                                        description = description
+                                    )
+                                    evidence?.let { attachmentRepository.uploadDisputeEvidence(disputeId, it) }
+                                    message = "Disputa abierta. Transaccion congelada."
+                                    reason = ""
+                                    description = ""
+                                    evidence = null
+                                    submitted = false
+                                    reload()
+                                } catch (error: Exception) {
+                                    message = error.message ?: "No se pudo abrir la disputa."
+                                } finally {
+                                    saving = false
+                                }
+                            }
                         }
                     })
                 }
@@ -295,31 +340,35 @@ private fun TransactionDropdown(
 }
 
 @Composable
-private fun EvidenceMockSection(evidenceCount: Int, onAddEvidence: () -> Unit) {
+private fun EvidenceSection(
+    evidence: CompressedImage?,
+    onAddEvidence: () -> Unit,
+    onRemoveEvidence: () -> Unit
+) {
     ExchangeCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.AttachFile, contentDescription = null, tint = ExchangePrimaryLight)
             Spacer(Modifier.width(8.dp))
             Column {
                 Text("Evidencias opcionales", fontWeight = FontWeight.SemiBold)
-                Text("JPG, PNG o PDF - maximo 10 MB por archivo", color = ExchangeMuted, style = MaterialTheme.typography.bodySmall)
+                Text("JPG o PNG - compresion automatica hasta 500 KB", color = ExchangeMuted, style = MaterialTheme.typography.bodySmall)
             }
         }
         Spacer(Modifier.height(10.dp))
-        PrimaryAction("Agregar evidencia demo", onAddEvidence, Modifier.fillMaxWidth())
-        if (evidenceCount > 0) {
+        PrimaryAction(if (evidence == null) "Seleccionar evidencia" else "Cambiar evidencia", onAddEvidence, Modifier.fillMaxWidth())
+        if (evidence != null) {
             Spacer(Modifier.height(10.dp))
-            repeat(evidenceCount) { index ->
-                Text(
-                    "evidencia_${index + 1}.png",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(ExchangeElevated)
-                        .padding(8.dp),
-                    color = ExchangeMuted
-                )
-                Spacer(Modifier.height(6.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(ExchangeElevated)
+                    .padding(8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("evidencia.jpg - ${evidence.bytes.size / 1024} KB", color = ExchangeMuted)
+                TextButton(onClick = onRemoveEvidence) { Text("Quitar") }
             }
         }
     }

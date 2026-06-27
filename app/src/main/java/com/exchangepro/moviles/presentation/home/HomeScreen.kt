@@ -26,6 +26,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,7 +38,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.exchangepro.moviles.data.repository.MockExchangeRepository
+import com.exchangepro.moviles.data.repository.FirebaseOfferRepository
+import com.exchangepro.moviles.data.repository.FirebaseTransactionRepository
+import com.exchangepro.moviles.data.repository.FirebaseUserRepository
+import com.exchangepro.moviles.data.repository.FirebaseWalletRepository
+import com.exchangepro.moviles.domain.model.AppUser
+import com.exchangepro.moviles.domain.model.Offer
+import com.exchangepro.moviles.domain.model.Transaction
+import com.exchangepro.moviles.domain.model.Wallet
 import com.exchangepro.moviles.presentation.navigation.Route
 import com.exchangepro.moviles.ui.components.ExchangeCard
 import com.exchangepro.moviles.ui.components.PrimaryAction
@@ -47,19 +59,47 @@ import com.exchangepro.moviles.ui.theme.ExchangePrimaryLight
 
 @Composable
 fun HomeScreen(navController: NavController) {
-    val user = MockExchangeRepository.currentUser
-    val wallet = MockExchangeRepository.wallet
+    val userRepository = remember { FirebaseUserRepository() }
+    val walletRepository = remember { FirebaseWalletRepository() }
+    val offerRepository = remember { FirebaseOfferRepository() }
+    val transactionRepository = remember { FirebaseTransactionRepository() }
+    var user by remember { mutableStateOf<AppUser?>(null) }
+    var wallet by remember { mutableStateOf(Wallet(userId = "", balances = emptyList())) }
+    var offers by remember { mutableStateOf(emptyList<Offer>()) }
+    var transactions by remember { mutableStateOf(emptyList<Transaction>()) }
+    var loadError by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        try {
+            user = userRepository.getCurrentUser()
+            wallet = walletRepository.getWallet()
+            offers = offerRepository.getActiveOffers()
+            transactions = transactionRepository.getMyTransactions()
+        } catch (error: Exception) {
+            loadError = error.message ?: "No se pudieron cargar los datos."
+        }
+    }
+
     val totalPen = wallet.balances.sumOf { if (it.currency.name == "PEN") it.available else it.available * 3.72 }
-    val activeOffers = MockExchangeRepository.offers.size
-    val transactions = MockExchangeRepository.transactions
+    val activeOffers = offers.size
 
     LazyColumn(
         modifier = Modifier.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            Text("Hola, ${user.fullName.split(" ").first()}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "Hola, ${user?.fullName?.split(" ")?.firstOrNull().orEmpty().ifBlank { "Usuario" }}",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold
+            )
             Text("Gestiona tus intercambios P2P desde un solo lugar", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
+        loadError?.let { error ->
+            item {
+                Text("No se pudo actualizar el resumen: $error", color = ExchangeMuted, style = MaterialTheme.typography.bodySmall)
+            }
         }
 
         item {
@@ -123,7 +163,7 @@ fun HomeScreen(navController: NavController) {
                 navController.navigate(Route.Offers.value)
             }
         }
-        items(MockExchangeRepository.offers.take(4)) { offer ->
+        items(offers.take(4)) { offer ->
             ExchangeCard(modifier = Modifier.clickable { navController.navigate(Route.Offers.value) }) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Row(verticalAlignment = Alignment.CenterVertically) {

@@ -34,11 +34,13 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.exchangepro.moviles.data.repository.FirebaseAuthRepository
 import com.exchangepro.moviles.ui.theme.ExchangeBg
 import com.exchangepro.moviles.ui.theme.ExchangeSurface
 import kotlinx.coroutines.launch
@@ -55,6 +57,7 @@ fun ExchangeScaffold(
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val authRepository = remember { FirebaseAuthRepository() }
     val items = if (isAdmin) {
         listOf(
             DrawerItem("Dashboard", Route.AdminDashboard, Icons.Default.Dashboard),
@@ -71,6 +74,7 @@ fun ExchangeScaffold(
             DrawerItem("Transacciones", Route.Transactions, Icons.Default.SwapHoriz),
             DrawerItem("Datos de pago", Route.PaymentData, Icons.Default.CreditCard),
             DrawerItem("Disputas", Route.Disputes, Icons.Default.ReportProblem),
+            DrawerItem("Feedback", Route.Feedback, Icons.Default.Feedback),
             DrawerItem("Notificaciones", Route.Notifications, Icons.Default.Campaign),
             DrawerItem("Perfil", Route.Profile, Icons.Default.Person)
         )
@@ -102,6 +106,7 @@ fun ExchangeScaffold(
                     icon = { Icon(Icons.Default.Logout, contentDescription = "Cerrar sesion") },
                     selected = false,
                     onClick = {
+                        authRepository.signOut()
                         navController.navigate(Route.Login.value) {
                             popUpTo(0)
                         }

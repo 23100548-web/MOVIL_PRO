@@ -16,6 +16,9 @@ ratings/{ratingId}
 notifications/{notificationId}
 walletMovements/{movementId}
 topUps/{topUpId}
+withdrawals/{withdrawalId}
+attachments/{attachmentId}
+feedback/{feedbackId}
 ```
 
 ## users
@@ -95,15 +98,32 @@ Equivale a `Transacciones` y `ComprobantesPago`.
 }
 ```
 
-## Storage
+## Adjuntos de imagen para el prototipo academico
 
-Los archivos no van en Firestore. Firestore solo guarda URL y metadatos.
+El proyecto usa `attachments/{attachmentId}` porque Cloud Storage requiere
+facturacion en proyectos nuevos. Esta solucion es solo para la demostracion
+universitaria.
 
-```text
-profilePhotos/{userId}/profile.jpg
-vouchers/{transactionId}/{fileName}
-disputeEvidence/{disputeId}/{fileName}
+Las imagenes se reducen automaticamente a JPEG de 500 KB como maximo y se
+guardan en un documento independiente para no cargar sus bytes al consultar
+usuarios, transacciones o disputas.
+
+```json
+{
+  "ownerId": "firebaseAuthUid",
+  "type": "VOUCHER | DISPUTE_EVIDENCE | PROFILE_PHOTO",
+  "relatedId": "transactionId | disputeId | userId",
+  "contentType": "image/jpeg",
+  "imageData": "Firestore Blob",
+  "size": 421350,
+  "width": 1280,
+  "height": 720,
+  "createdAt": "serverTimestamp"
+}
 ```
+
+No se admiten PDF ni archivos grandes. En produccion estos adjuntos deben
+migrarse a un servicio especializado de almacenamiento de archivos.
 
 ## topUps
 
@@ -138,6 +158,66 @@ Mantiene el historial de entradas y salidas de cada usuario.
 }
 ```
 
+## paymentData
+
+Cada usuario mantiene un unico documento con sus destinos de cobro.
+
+```text
+paymentData/{userId}
+```
+
+```json
+{
+  "userId": "firebaseAuthUid",
+  "yape": "999888777",
+  "plin": "",
+  "bankName": "BCP",
+  "accountNumber": "19112345678012",
+  "cci": "00219112345678012000",
+  "updatedAt": "serverTimestamp"
+}
+```
+
+## withdrawals
+
+Los retiros del prototipo se completan de forma atomica: descuentan el saldo,
+crean un retiro y agregan un movimiento negativo.
+
+```json
+{
+  "userId": "firebaseAuthUid",
+  "currency": "PEN",
+  "amount": 100.00,
+  "paymentMethod": "YAPE",
+  "destination": "999888777",
+  "status": "COMPLETADO",
+  "createdAt": "serverTimestamp"
+}
+```
+
 ## Nota sobre saldos
 
-Cuando se conecte Firebase real, los cambios de saldo deben hacerse con transacciones de Firestore o Cloud Functions. No conviene modificar saldos desde varias pantallas sin una operacion atomica.
+La aplicacion usa transacciones atomicas de Firestore para evitar cambios parciales.
+Sin embargo, sigue siendo un prototipo academico: un cliente modificado podria
+intentar operaciones no previstas. En produccion, las recargas, retiros,
+retenciones, liberaciones y resoluciones de disputas deben ejecutarse en un
+backend confiable o Cloud Functions.
+
+## Reglas de seguridad
+
+El archivo `firestore.rules` exige Firebase Authentication y aplica acceso por
+propietario, participantes de una transaccion y rol `ADMIN`. Tambien limita los
+adjuntos a JPEG de 500 KB y bloquea eliminaciones directas de registros
+financieros.
+
+Para publicarlas desde la raiz del proyecto:
+
+```powershell
+firebase login
+firebase use <ID_DEL_PROYECTO>
+firebase deploy --only firestore:rules
+```
+
+Antes de desplegar, el usuario administrador debe tener `"role": "ADMIN"` en
+`users/{uid}`. Los usuarios registrados por la aplicacion siempre nacen con
+`"role": "USER"`.

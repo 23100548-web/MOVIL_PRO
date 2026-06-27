@@ -22,15 +22,19 @@ import androidx.compose.material.icons.filled.PhoneIphone
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,6 +43,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.exchangepro.moviles.data.repository.FirebasePaymentDataRepository
+import com.exchangepro.moviles.data.repository.UserPaymentData
 import com.exchangepro.moviles.ui.components.ExchangeCard
 import com.exchangepro.moviles.ui.components.PrimaryAction
 import com.exchangepro.moviles.ui.theme.ExchangeAccent
@@ -47,11 +53,14 @@ import com.exchangepro.moviles.ui.theme.ExchangeNegative
 import com.exchangepro.moviles.ui.theme.ExchangePositive
 import com.exchangepro.moviles.ui.theme.ExchangePrimary
 import com.exchangepro.moviles.ui.theme.ExchangePrimaryLight
+import kotlinx.coroutines.launch
 
 private data class BankOption(val id: Int, val name: String, val accountDigits: Int = 14, val cciDigits: Int = 20)
 
 @Composable
 fun PaymentDataScreen() {
+    val repository = remember { FirebasePaymentDataRepository() }
+    val scope = rememberCoroutineScope()
     val banks = remember {
         listOf(
             BankOption(1, "BCP"),
@@ -60,13 +69,36 @@ fun PaymentDataScreen() {
             BankOption(4, "Scotiabank")
         )
     }
-    var yape by remember { mutableStateOf("999888777") }
+    var yape by remember { mutableStateOf("") }
     var plin by remember { mutableStateOf("") }
-    var selectedBank by remember { mutableStateOf<BankOption?>(banks.first()) }
-    var accountNumber by remember { mutableStateOf("19112345678012") }
+    var selectedBank by remember { mutableStateOf<BankOption?>(null) }
+    var accountNumber by remember { mutableStateOf("") }
     var cci by remember { mutableStateOf("") }
     var submitted by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    var savedData by remember { mutableStateOf(UserPaymentData()) }
+    var loading by remember { mutableStateOf(true) }
+    var saving by remember { mutableStateOf(false) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    fun applyData(data: UserPaymentData) {
+        savedData = data
+        yape = data.yape
+        plin = data.plin
+        selectedBank = banks.firstOrNull { it.name == data.bankName }
+        accountNumber = data.accountNumber
+        cci = data.cci
+    }
+
+    LaunchedEffect(Unit) {
+        try {
+            applyData(repository.get())
+        } catch (error: Exception) {
+            message = error.message ?: "No se pudieron cargar los datos de pago."
+        } finally {
+            loading = false
+        }
+    }
 
     LazyColumn(
         modifier = Modifier.padding(16.dp),
@@ -75,6 +107,14 @@ fun PaymentDataScreen() {
         item {
             Text("Datos de Pago", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Text("Configura como recibiras los pagos de tus ventas", color = ExchangeMuted)
+        }
+
+        if (loading) {
+            item {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                    CircularProgressIndicator(color = ExchangePrimary)
+                }
+            }
         }
 
         item {
@@ -163,15 +203,23 @@ fun PaymentDataScreen() {
             }
         }
 
+        if (savedData.availableDestinations().isNotEmpty()) {
+            item {
+                TextButton(
+                    enabled = !saving && !loading,
+                    onClick = { showDeleteConfirm = true }
+                ) {
+                    Text("Eliminar datos de pago", color = ExchangeNegative)
+                }
+            }
+        }
+
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                 TextButton(
+                    enabled = !saving && !loading,
                     onClick = {
-                        yape = ""
-                        plin = ""
-                        selectedBank = null
-                        accountNumber = ""
-                        cci = ""
+                        applyData(savedData)
                         submitted = false
                         message = null
                     }
@@ -179,13 +227,69 @@ fun PaymentDataScreen() {
                     Text("Cancelar")
                 }
                 Spacer(Modifier.width(10.dp))
-                PrimaryAction("Guardar Datos de Pago", {
-                    submitted = true
-                    message = validatePaymentData(yape, plin, selectedBank, accountNumber, cci)
-                        ?: "Datos de pago guardados exitosamente."
+                PrimaryAction(if (saving) "Guardando..." else "Guardar Datos de Pago", {
+                    if (!saving && !loading) {
+                        submitted = true
+                        val validation = validatePaymentData(yape, plin, selectedBank, accountNumber, cci)
+                        if (validation != null) {
+                            message = validation
+                        } else {
+                            saving = true
+                            scope.launch {
+                                try {
+                                    val next = UserPaymentData(
+                                        yape = yape,
+                                        plin = plin,
+                                        bankName = if (accountNumber.isBlank()) "" else selectedBank?.name.orEmpty(),
+                                        accountNumber = accountNumber,
+                                        cci = cci
+                                    )
+                                    repository.save(next)
+                                    applyData(repository.get())
+                                    message = "Datos de pago guardados exitosamente."
+                                } catch (error: Exception) {
+                                    message = error.message ?: "No se pudieron guardar los datos."
+                                } finally {
+                                    saving = false
+                                }
+                            }
+                        }
+                    }
                 })
             }
         }
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Eliminar datos de pago") },
+            text = { Text("No podras realizar retiros hasta registrar un metodo nuevamente.") },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancelar") }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirm = false
+                        saving = true
+                        scope.launch {
+                            try {
+                                repository.delete()
+                                applyData(UserPaymentData())
+                                message = "Datos de pago eliminados."
+                            } catch (error: Exception) {
+                                message = error.message ?: "No se pudieron eliminar los datos."
+                            } finally {
+                                saving = false
+                            }
+                        }
+                    }
+                ) {
+                    Text("Eliminar", color = ExchangeNegative)
+                }
+            }
+        )
     }
 }
 
@@ -308,6 +412,7 @@ private fun validatePaymentData(
     if (hasYape && yape.length != 9) return "Yape debe tener 9 digitos."
     if (hasPlin && plin.length != 9) return "Plin debe tener 9 digitos."
     if (account.isNotBlank() && bank == null) return "Selecciona un banco."
+    if (cci.isNotBlank() && account.isBlank()) return "Ingresa primero el numero de cuenta."
     if (hasBank && account.length != bank.accountDigits) return "La cuenta de ${bank.name} debe tener ${bank.accountDigits} digitos."
     if (cci.isNotBlank() && cci.length != (bank?.cciDigits ?: 20)) return "El CCI debe tener ${bank?.cciDigits ?: 20} digitos."
 

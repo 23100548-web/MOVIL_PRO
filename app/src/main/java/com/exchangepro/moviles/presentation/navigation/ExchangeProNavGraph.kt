@@ -12,6 +12,7 @@ import com.exchangepro.moviles.presentation.admin.AdminReportsScreen
 import com.exchangepro.moviles.presentation.auth.LoginScreen
 import com.exchangepro.moviles.presentation.auth.RegisterScreen
 import com.exchangepro.moviles.presentation.disputes.DisputesScreen
+import com.exchangepro.moviles.presentation.feedback.FeedbackScreen
 import com.exchangepro.moviles.presentation.home.HomeScreen
 import com.exchangepro.moviles.presentation.notifications.NotificationsScreen
 import com.exchangepro.moviles.presentation.offers.CreateOfferScreen
@@ -52,6 +53,9 @@ fun ExchangeProNavGraph() {
         }
         composable(Route.Disputes.value) {
             ExchangeScaffold(navController, "Disputas", content = { DisputesScreen() })
+        }
+        composable(Route.Feedback.value) {
+            ExchangeScaffold(navController, "Feedback") { FeedbackScreen() }
         }
         composable(Route.Profile.value) {
             ExchangeScaffold(navController, "Perfil") { ProfileScreen() }

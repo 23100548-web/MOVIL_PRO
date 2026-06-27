@@ -15,7 +15,8 @@ data class AppUser(
     val documentNumber: String,
     val reputation: Double,
     val totalRatings: Int,
-    val photoUrl: String? = null
+    val photoUrl: String? = null,
+    val photoAttachmentId: String? = null
 )
 
 data class WalletBalance(
@@ -98,7 +99,19 @@ data class Transaction(
     val totalToPay: Double,
     val currency: CurrencyCode,
     val status: TransactionStatus,
-    val voucherUrl: String? = null
+    val voucherUrl: String? = null,
+    val toCurrency: CurrencyCode = CurrencyCode.PEN,
+    val fundsOwnerId: String = "",
+    val fundsRecipientId: String = "",
+    val heldCurrency: CurrencyCode = currency,
+    val heldAmount: Double = operationAmount,
+    val voucherAttachmentId: String? = null
+)
+
+data class WithdrawalRequest(
+    val currency: CurrencyCode,
+    val amount: Double,
+    val paymentMethodKey: String
 )
 
 data class PaymentData(
@@ -114,7 +127,10 @@ data class Dispute(
     val id: String,
     val transactionCode: String,
     val reason: String,
-    val status: String
+    val status: String,
+    val description: String = "",
+    val transactionId: String = "",
+    val evidenceAttachmentIds: List<String> = emptyList()
 )
 
 data class NotificationItem(
