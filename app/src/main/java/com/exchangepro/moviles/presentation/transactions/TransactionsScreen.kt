@@ -33,6 +33,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -53,6 +54,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.exchangepro.moviles.data.image.ImageCompressor
 import com.exchangepro.moviles.data.repository.FirebaseAttachmentRepository
+import com.exchangepro.moviles.data.repository.FirebaseRatingRepository
 import com.exchangepro.moviles.data.repository.FirebaseTransactionRepository
 import com.exchangepro.moviles.domain.model.Transaction
 import com.exchangepro.moviles.domain.model.TransactionStatus
@@ -73,6 +75,7 @@ import kotlinx.coroutines.launch
 fun TransactionsScreen() {
     val repository = remember { FirebaseTransactionRepository() }
     val attachmentRepository = remember { FirebaseAttachmentRepository() }
+    val ratingRepository = remember { FirebaseRatingRepository() }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val currentUserId = remember { repository.currentUserId() }
@@ -84,6 +87,7 @@ fun TransactionsScreen() {
     var uploadingVoucher by remember { mutableStateOf(false) }
     var voucherPreview by remember { mutableStateOf<ByteArray?>(null) }
     var loadingPreview by remember { mutableStateOf(false) }
+    var ratingTarget by remember { mutableStateOf<Transaction?>(null) }
 
     suspend fun reloadTransactions() {
         transactions = repository.getMyTransactions()
@@ -208,6 +212,43 @@ fun TransactionsScreen() {
                 performAction("Transaccion marcada en disputa: ${trx.code}.") {
                     repository.openDispute(trx.id)
                 }
+            },
+            onRate = {
+                scope.launch {
+                    try {
+                        if (ratingRepository.hasRated(trx.id)) {
+                            actionFailed = true
+                            message = "Ya calificaste esta transaccion."
+                            selected = null
+                        } else {
+                            selected = null
+                            ratingTarget = trx
+                        }
+                    } catch (error: Exception) {
+                        actionFailed = true
+                        message = error.message ?: "No se pudo verificar la calificacion."
+                    }
+                }
+            }
+        )
+    }
+
+    ratingTarget?.let { trx ->
+        RatingDialog(
+            transactionCode = trx.code,
+            onDismiss = { ratingTarget = null },
+            onSubmit = { score, comment ->
+                scope.launch {
+                    try {
+                        ratingRepository.submit(trx.id, score, comment)
+                        actionFailed = false
+                        message = "Calificacion registrada. Gracias por tu opinion."
+                        ratingTarget = null
+                    } catch (error: Exception) {
+                        actionFailed = true
+                        message = error.message ?: "No se pudo guardar la calificacion."
+                    }
+                }
             }
         )
     }
@@ -266,7 +307,8 @@ private fun TransactionDetailDialog(
     onViewVoucher: () -> Unit,
     onRelease: () -> Unit,
     onCancel: () -> Unit,
-    onDispute: () -> Unit
+    onDispute: () -> Unit,
+    onRate: () -> Unit
 ) {
     val isBuyer = trx.buyerId == currentUserId
     val isSeller = trx.sellerId == currentUserId
@@ -405,7 +447,7 @@ private fun TransactionDetailDialog(
                                 }
                             }
                             if (trx.status == TransactionStatus.COMPLETADO) {
-                                Text("Transaccion completada. Luego agregaremos calificacion.", color = ExchangeMuted)
+                                PrimaryAction("Calificar usuario", onRate, Modifier.fillMaxWidth())
                             }
                             if (trx.status == TransactionStatus.EN_DISPUTA) {
                                 Text("La transaccion esta en disputa.", color = ExchangeMuted)
@@ -417,6 +459,54 @@ private fun TransactionDetailDialog(
         },
         containerColor = ExchangeSurface,
         shape = RoundedCornerShape(18.dp)
+    )
+}
+
+@Composable
+private fun RatingDialog(
+    transactionCode: String,
+    onDismiss: () -> Unit,
+    onSubmit: (Int, String) -> Unit
+) {
+    var score by remember { mutableStateOf(5) }
+    var comment by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Calificar $transactionCode") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Selecciona una puntuacion")
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    (1..5).forEach { value ->
+                        Button(
+                            onClick = { score = value },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (score == value) ExchangePrimary else ExchangeElevated
+                            ),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+                            modifier = Modifier.size(42.dp)
+                        ) {
+                            Text(value.toString())
+                        }
+                    }
+                }
+                OutlinedTextField(
+                    value = comment,
+                    onValueChange = { comment = it.take(300) },
+                    label = { Text("Comentario opcional") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSubmit(score, comment) }) { Text("Enviar") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        },
+        containerColor = ExchangeSurface
     )
 }
 

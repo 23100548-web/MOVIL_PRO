@@ -30,6 +30,7 @@ class FirebaseAttachmentRepository(
         val uid = currentUserId()
         val transactionRef = db.collection(FirebaseCollections.TRANSACTIONS).document(transactionId)
         val attachmentRef = db.collection(FirebaseCollections.ATTACHMENTS).document()
+        val notificationRef = db.collection(FirebaseCollections.NOTIFICATIONS).document()
 
         db.runTransaction { transaction ->
             val record = transaction.get(transactionRef)
@@ -56,6 +57,16 @@ class FirebaseAttachmentRepository(
                     "voucherAttachmentId" to attachmentRef.id,
                     "status" to TransactionStatus.PAGADO.name,
                     "paidAt" to FieldValue.serverTimestamp()
+                )
+            )
+            transaction.set(
+                notificationRef,
+                mapOf(
+                    "userId" to record.getString("fundsOwnerId").orEmpty(),
+                    "title" to "Comprobante recibido",
+                    "message" to "Revisa el comprobante de ${record.getString("code").orEmpty()}.",
+                    "read" to false,
+                    "createdAt" to FieldValue.serverTimestamp()
                 )
             )
             null

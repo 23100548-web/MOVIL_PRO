@@ -35,6 +35,7 @@ class FirebaseTransactionRepository(
         val offerRef = db.collection(FirebaseCollections.OFFERS).document(offerId)
         val takerRef = db.collection(FirebaseCollections.USERS).document(takerId)
         val transactionRef = db.collection(FirebaseCollections.TRANSACTIONS).document()
+        val ownerNotificationRef = db.collection(FirebaseCollections.NOTIFICATIONS).document()
         var created: Transaction? = null
 
         db.runTransaction { firestoreTransaction ->
@@ -155,6 +156,14 @@ class FirebaseTransactionRepository(
                     "createdAt" to FieldValue.serverTimestamp()
                 )
             )
+            firestoreTransaction.set(
+                ownerNotificationRef,
+                notificationData(
+                    userId = ownerId,
+                    title = "Nueva transaccion",
+                    message = "Tu oferta genero la operacion $code."
+                )
+            )
             null
         }.awaitTransaction()
 
@@ -195,6 +204,7 @@ class FirebaseTransactionRepository(
         val db = dbProvider()
         val uid = currentUserId()
         val ref = db.collection(FirebaseCollections.TRANSACTIONS).document(transactionId)
+        val notificationRef = db.collection(FirebaseCollections.NOTIFICATIONS).document()
         db.runTransaction { transaction ->
             val snapshot = transaction.get(ref)
             require(snapshot.exists()) { "La transaccion ya no existe." }
@@ -212,6 +222,19 @@ class FirebaseTransactionRepository(
                     "disputedAt" to FieldValue.serverTimestamp()
                 )
             )
+            val counterpartId = if (uid == snapshot.getString("buyerId")) {
+                snapshot.getString("sellerId").orEmpty()
+            } else {
+                snapshot.getString("buyerId").orEmpty()
+            }
+            transaction.set(
+                notificationRef,
+                notificationData(
+                    userId = counterpartId,
+                    title = "Transaccion en disputa",
+                    message = "La operacion ${snapshot.getString("code").orEmpty()} fue puesta en disputa."
+                )
+            )
             null
         }.awaitTransaction()
     }
@@ -222,6 +245,7 @@ class FirebaseTransactionRepository(
         val transactionRef = db.collection(FirebaseCollections.TRANSACTIONS).document(transactionId)
         val ownerMovementRef = db.collection(FirebaseCollections.WALLET_MOVEMENTS).document()
         val recipientMovementRef = db.collection(FirebaseCollections.WALLET_MOVEMENTS).document()
+        val recipientNotificationRef = db.collection(FirebaseCollections.NOTIFICATIONS).document()
 
         db.runTransaction { transaction ->
             val record = transaction.get(transactionRef)
@@ -307,6 +331,14 @@ class FirebaseTransactionRepository(
                     "createdAt" to FieldValue.serverTimestamp()
                 )
             )
+            transaction.set(
+                recipientNotificationRef,
+                notificationData(
+                    userId = recipientId,
+                    title = "Fondos recibidos",
+                    message = "La operacion ${record.getString("code").orEmpty()} fue completada."
+                )
+            )
             null
         }.awaitTransaction()
     }
@@ -315,6 +347,7 @@ class FirebaseTransactionRepository(
         val db = dbProvider()
         val uid = currentUserId()
         val transactionRef = db.collection(FirebaseCollections.TRANSACTIONS).document(transactionId)
+        val cancellationNotificationRef = db.collection(FirebaseCollections.NOTIFICATIONS).document()
 
         db.runTransaction { transaction ->
             val record = transaction.get(transactionRef)
@@ -350,6 +383,19 @@ class FirebaseTransactionRepository(
                 mapOf(
                     "status" to TransactionStatus.CANCELADO.name,
                     "cancelledAt" to FieldValue.serverTimestamp()
+                )
+            )
+            val counterpartId = if (uid == record.getString("buyerId")) {
+                record.getString("sellerId").orEmpty()
+            } else {
+                record.getString("buyerId").orEmpty()
+            }
+            transaction.set(
+                cancellationNotificationRef,
+                notificationData(
+                    userId = counterpartId,
+                    title = "Transaccion cancelada",
+                    message = "La operacion ${record.getString("code").orEmpty()} fue cancelada."
                 )
             )
             null
@@ -413,6 +459,15 @@ class FirebaseTransactionRepository(
     private fun DocumentSnapshot.createdAtMillis(): Long =
         (get("createdAt") as? Timestamp)?.toDate()?.time ?: 0L
 }
+
+private fun notificationData(userId: String, title: String, message: String): Map<String, Any> =
+    mapOf(
+        "userId" to userId,
+        "title" to title,
+        "message" to message,
+        "read" to false,
+        "createdAt" to FieldValue.serverTimestamp()
+    )
 
 private suspend fun <T> Task<T>.awaitTransaction(): T = suspendCancellableCoroutine { continuation ->
     addOnSuccessListener { result -> continuation.resume(result) }

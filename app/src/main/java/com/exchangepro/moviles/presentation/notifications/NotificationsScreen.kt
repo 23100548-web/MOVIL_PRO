@@ -21,14 +21,18 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.exchangepro.moviles.data.repository.MockExchangeRepository
+import com.exchangepro.moviles.data.repository.FirebaseNotificationRepository
 import com.exchangepro.moviles.domain.model.NotificationItem
 import com.exchangepro.moviles.ui.components.ExchangeCard
 import com.exchangepro.moviles.ui.components.StatusPill
@@ -36,10 +40,22 @@ import com.exchangepro.moviles.ui.theme.ExchangeElevated
 import com.exchangepro.moviles.ui.theme.ExchangeMuted
 import com.exchangepro.moviles.ui.theme.ExchangePrimary
 import com.exchangepro.moviles.ui.theme.ExchangePrimaryLight
+import kotlinx.coroutines.launch
 
 @Composable
 fun NotificationsScreen() {
-    val notifications = remember { mutableStateListOf<NotificationItem>().apply { addAll(MockExchangeRepository.notifications) } }
+    val repository = remember { FirebaseNotificationRepository() }
+    val scope = rememberCoroutineScope()
+    var notifications by remember { mutableStateOf(emptyList<NotificationItem>()) }
+    var loading by remember { mutableStateOf(true) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        runCatching { repository.getMine() }
+            .onSuccess { notifications = it }
+            .onFailure { errorMessage = it.message ?: "No se pudieron cargar las notificaciones." }
+        loading = false
+    }
 
     LazyColumn(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
@@ -47,7 +63,13 @@ fun NotificationsScreen() {
             Text("Tus avisos recientes", color = ExchangeMuted)
         }
 
-        if (notifications.isEmpty()) {
+        errorMessage?.let {
+            item { ExchangeCard { Text(it, color = MaterialTheme.colorScheme.error) } }
+        }
+
+        if (loading) {
+            item { ExchangeCard { Text("Cargando notificaciones...", color = ExchangeMuted) } }
+        } else if (notifications.isEmpty()) {
             item {
                 ExchangeCard {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
@@ -61,9 +83,18 @@ fun NotificationsScreen() {
                 NotificationRow(
                     item = item,
                     onClick = {
-                        val index = notifications.indexOfFirst { it.id == item.id }
-                        if (index >= 0 && !item.read) {
-                            notifications[index] = item.copy(read = true)
+                        if (!item.read) {
+                            scope.launch {
+                                runCatching { repository.markRead(item.id) }
+                                    .onSuccess {
+                                        notifications = notifications.map {
+                                            if (it.id == item.id) it.copy(read = true) else it
+                                        }
+                                    }
+                                    .onFailure {
+                                        errorMessage = it.message ?: "No se pudo marcar como leida."
+                                    }
+                            }
                         }
                     }
                 )

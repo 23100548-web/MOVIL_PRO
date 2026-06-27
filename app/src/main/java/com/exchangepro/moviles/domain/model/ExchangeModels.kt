@@ -127,7 +127,10 @@ data class Dispute(
     val id: String,
     val transactionCode: String,
     val reason: String,
-    val status: String
+    val status: String,
+    val description: String = "",
+    val transactionId: String = "",
+    val evidenceAttachmentIds: List<String> = emptyList()
 )
 
 data class NotificationItem(

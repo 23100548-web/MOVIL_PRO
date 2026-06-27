@@ -74,6 +74,7 @@ fun ExchangeScaffold(
             DrawerItem("Transacciones", Route.Transactions, Icons.Default.SwapHoriz),
             DrawerItem("Datos de pago", Route.PaymentData, Icons.Default.CreditCard),
             DrawerItem("Disputas", Route.Disputes, Icons.Default.ReportProblem),
+            DrawerItem("Feedback", Route.Feedback, Icons.Default.Feedback),
             DrawerItem("Notificaciones", Route.Notifications, Icons.Default.Campaign),
             DrawerItem("Perfil", Route.Profile, Icons.Default.Person)
         )
