@@ -137,6 +137,7 @@ fun WalletScreen() {
         item {
             WalletHero(
                 wallet = wallet,
+                rates = rates,
                 onTopUp = { showTopUp = true },
                 onWithdraw = { showWithdraw = true }
             )
@@ -225,8 +226,22 @@ fun WalletScreen() {
 }
 
 @Composable
-private fun WalletHero(wallet: Wallet, onTopUp: () -> Unit, onWithdraw: () -> Unit) {
-    val total = wallet.balances.sumOf { it.available }
+private fun WalletHero(
+    wallet: Wallet,
+    rates: List<ExchangeRate>,
+    onTopUp: () -> Unit,
+    onWithdraw: () -> Unit
+) {
+    val canEstimate = wallet.balances.all { balance ->
+        balance.currency == CurrencyCode.PEN || rates.any { it.code == balance.currency }
+    }
+    val totalInPen = wallet.balances.sumOf { balance ->
+        if (balance.currency == CurrencyCode.PEN) {
+            balance.available
+        } else {
+            balance.available * (rates.firstOrNull { it.code == balance.currency }?.buy ?: 0.0)
+        }
+    }
 
     Card(
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
@@ -250,9 +265,14 @@ private fun WalletHero(wallet: Wallet, onTopUp: () -> Unit, onWithdraw: () -> Un
                 }
                 Spacer(Modifier.width(14.dp))
                 Column {
-                    Text("Wallet #${wallet.userId.takeLast(4)}", color = Color.White.copy(alpha = 0.78f), style = MaterialTheme.typography.labelMedium)
-                    Text("Saldo total disponible", color = Color.White.copy(alpha = 0.86f), style = MaterialTheme.typography.bodySmall)
-                    Text(formatMoney(total, null), color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.headlineSmall)
+                    Text("Wallet ...${wallet.userId.takeLast(4)}", color = Color.White.copy(alpha = 0.78f), style = MaterialTheme.typography.labelMedium)
+                    Text("Saldo total estimado en PEN", color = Color.White.copy(alpha = 0.86f), style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        if (canEstimate) formatMoney(totalInPen, CurrencyCode.PEN) else "Calculando...",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.headlineSmall
+                    )
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -415,7 +435,7 @@ private fun TopUpDialog(
                 }
 
                 item {
-                    SummaryRow("Wallet", "#${wallet.userId.takeLast(4)}")
+                    SummaryRow("Wallet", "...${wallet.userId.takeLast(4)}")
                 }
 
                 item {
@@ -425,10 +445,15 @@ private fun TopUpDialog(
                             OutlinedTextField(
                                 value = currency?.let { "${it.name} - ${currencyName(it)}" }.orEmpty(),
                                 onValueChange = {},
-                                modifier = Modifier.fillMaxWidth().clickable { currencyMenuOpen = true },
+                                modifier = Modifier.fillMaxWidth(),
                                 readOnly = true,
                                 trailingIcon = { Icon(Icons.Default.KeyboardArrowDown, contentDescription = null) },
                                 placeholder = { Text("Seleccionar moneda") }
+                            )
+                            Box(
+                                Modifier
+                                    .matchParentSize()
+                                    .clickable { currencyMenuOpen = true }
                             )
                             DropdownMenu(expanded = currencyMenuOpen, onDismissRequest = { currencyMenuOpen = false }) {
                                 CurrencyCode.values().forEach { option ->
@@ -501,7 +526,7 @@ private fun TopUpDialog(
                                 currency == null -> error = "Selecciona una moneda."
                                 parsedAmount == null || parsedAmount <= 0.0 -> error = "El monto debe ser mayor a 0."
                                 selectedAccount == null -> error = "Selecciona una cuenta de deposito."
-                                reference.isBlank() -> error = "Ingresa la referencia de operacion."
+                                reference.length < 6 -> error = "La referencia debe tener entre 6 y 15 digitos."
                                 else -> onConfirm(
                                     TopUpRequest(
                                         currency = currency!!,
