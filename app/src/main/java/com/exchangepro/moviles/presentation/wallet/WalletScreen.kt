@@ -73,6 +73,7 @@ import com.exchangepro.moviles.domain.model.WalletBalance
 import com.exchangepro.moviles.domain.model.WalletMovement
 import com.exchangepro.moviles.domain.model.WithdrawalRequest
 import com.exchangepro.moviles.ui.components.ExchangeCard
+import com.exchangepro.moviles.ui.components.OperationSuccessDialog
 import com.exchangepro.moviles.ui.components.PrimaryAction
 import com.exchangepro.moviles.ui.components.SecondaryAction
 import com.exchangepro.moviles.ui.theme.ExchangeAccent
@@ -104,6 +105,8 @@ fun WalletScreen() {
     var message by remember { mutableStateOf<String?>(null) }
     var showTopUp by remember { mutableStateOf(false) }
     var showWithdraw by remember { mutableStateOf(false) }
+    var showSuccessDialog by remember { mutableStateOf(false) }
+    var successData by remember { mutableStateOf(Pair("", "")) }
 
     fun refresh() {
         scope.launch {
@@ -194,7 +197,8 @@ fun WalletScreen() {
                     try {
                         walletRepository.topUp(request)
                         showTopUp = false
-                        message = "Saldo recargado correctamente."
+                        successData = "Recarga Exitosa" to "Se han recargado ${formatMoney(request.amount, request.currency)} a tu cuenta."
+                        showSuccessDialog = true
                         refresh()
                     } catch (error: Exception) {
                         message = "No se pudo guardar en Firebase: ${error.message.orEmpty()}"
@@ -214,13 +218,22 @@ fun WalletScreen() {
                     try {
                         walletRepository.withdraw(request)
                         showWithdraw = false
-                        message = "Retiro completado correctamente."
+                        successData = "Retiro Exitoso" to "Se ha procesado tu retiro de ${formatMoney(request.amount, request.currency)} correctamente."
+                        showSuccessDialog = true
                         refresh()
                     } catch (error: Exception) {
                         message = error.message ?: "No se pudo completar el retiro."
                     }
                 }
             }
+        )
+    }
+
+    if (showSuccessDialog) {
+        OperationSuccessDialog(
+            title = successData.first,
+            message = successData.second,
+            onDismiss = { showSuccessDialog = false }
         )
     }
 }
