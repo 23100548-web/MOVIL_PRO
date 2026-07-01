@@ -63,6 +63,7 @@ import com.exchangepro.moviles.domain.model.TransactionStatus
 import com.exchangepro.moviles.domain.model.Wallet
 import com.exchangepro.moviles.presentation.navigation.Route
 import com.exchangepro.moviles.ui.components.ExchangeCard
+import com.exchangepro.moviles.ui.components.OperationSuccessDialog
 import com.exchangepro.moviles.ui.components.PrimaryAction
 import com.exchangepro.moviles.ui.components.SecondaryAction
 import com.exchangepro.moviles.ui.components.StatusPill
@@ -88,6 +89,8 @@ fun OffersScreen(navController: NavController) {
     var actionMessage by remember { mutableStateOf<String?>(null) }
     var actionFailed by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(true) }
+    var showSuccessDialog by remember { mutableStateOf(false) }
+    var successData by remember { mutableStateOf(Pair("", "")) }
 
     suspend fun reloadOffers() {
         offers = offerRepository.getActiveOffers()
@@ -147,7 +150,8 @@ fun OffersScreen(navController: NavController) {
                             offerRepository.cancelOffer(offer.id)
                             reloadOffers()
                             actionFailed = false
-                            actionMessage = "Oferta cancelada y saldo liberado."
+                            successData = "Oferta Cancelada" to "La oferta de ${formatMoney(offer.offeredAmount, offer.fromCurrency)} ha sido retirada del mercado y el saldo retenido ha sido liberado."
+                            showSuccessDialog = true
                         } catch (error: Exception) {
                             actionFailed = true
                             actionMessage = error.message ?: "No se pudo cancelar la oferta."
@@ -178,11 +182,22 @@ fun OffersScreen(navController: NavController) {
                     )
                 }
             },
-            onDone = { code ->
+            onDone = { code, amount, currency ->
                 actionFailed = false
-                actionMessage = "Transaccion $code iniciada. Puedes continuar desde Mis Transacciones."
                 takingOffer = null
                 scope.launch { reloadOffers() }
+                successData = "Transacción Iniciada" to "La transacción $code por ${formatMoney(amount, currency)} ha sido iniciada. Puedes seguir el proceso desde la sección de transacciones."
+                showSuccessDialog = true
+            }
+        )
+    }
+
+    if (showSuccessDialog) {
+        OperationSuccessDialog(
+            title = successData.first,
+            message = successData.second,
+            onDismiss = { 
+                showSuccessDialog = false
                 navController.navigate(Route.Transactions.value)
             }
         )
@@ -198,6 +213,8 @@ fun MyOffersScreen(navController: NavController) {
     var actionMessage by remember { mutableStateOf<String?>(null) }
     var actionFailed by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(true) }
+    var showSuccessDialog by remember { mutableStateOf(false) }
+    var successData by remember { mutableStateOf(Pair("", "")) }
 
     suspend fun reloadOffers() {
         myOffers = offerRepository.getMyActiveOffers()
@@ -265,7 +282,8 @@ fun MyOffersScreen(navController: NavController) {
                         offerRepository.cancelOffer(offer.id)
                         reloadOffers()
                         actionFailed = false
-                        actionMessage = "Oferta cancelada y saldo liberado."
+                        successData = "Oferta Cancelada" to "La oferta de ${formatMoney(offer.offeredAmount, offer.fromCurrency)} ha sido retirada del mercado y el saldo retenido ha sido liberado."
+                        showSuccessDialog = true
                     } catch (error: Exception) {
                         actionFailed = true
                         actionMessage = error.message ?: "No se pudo cancelar la oferta."
@@ -273,6 +291,14 @@ fun MyOffersScreen(navController: NavController) {
                 }
                 selectedOffer = null
             }
+        )
+    }
+
+    if (showSuccessDialog) {
+        OperationSuccessDialog(
+            title = successData.first,
+            message = successData.second,
+            onDismiss = { showSuccessDialog = false }
         )
     }
 }
@@ -295,6 +321,8 @@ fun CreateOfferScreen(navController: NavController) {
     var message by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
     var submitted by remember { mutableStateOf(false) }
+    var showSuccessDialog by remember { mutableStateOf(false) }
+    var successData by remember { mutableStateOf(Pair("", "")) }
 
     val rateOptions = remember(fromCurrency, toCurrency, rates) {
         buildRateOptions(fromCurrency, toCurrency, rates)
@@ -457,11 +485,9 @@ fun CreateOfferScreen(navController: NavController) {
                                                     minimumAmount = minimum
                                                 )
                                             )
-                                            message = "Oferta publicada exitosamente."
                                             wallet = walletRepository.getWallet()
-                                            navController.navigate(Route.MyOffers.value) {
-                                                popUpTo(Route.Offers.value) { inclusive = false }
-                                            }
+                                            successData = "Oferta Publicada" to "Tu oferta de ${formatMoney(offered, fromCurrency)} ha sido publicada exitosamente en el mercado P2P."
+                                            showSuccessDialog = true
                                         } catch (error: Exception) {
                                             message = error.message ?: "No se pudo publicar la oferta."
                                         } finally {
@@ -479,6 +505,19 @@ fun CreateOfferScreen(navController: NavController) {
                 }
             }
         }
+    }
+
+    if (showSuccessDialog) {
+        OperationSuccessDialog(
+            title = successData.first,
+            message = successData.second,
+            onDismiss = {
+                showSuccessDialog = false
+                navController.navigate(Route.MyOffers.value) {
+                    popUpTo(Route.Offers.value) { inclusive = false }
+                }
+            }
+        )
     }
 }
 
@@ -719,7 +758,7 @@ private fun TakeOfferDialog(
     offer: Offer,
     onDismiss: () -> Unit,
     onCreate: (Double, String, (Result<com.exchangepro.moviles.domain.model.Transaction>) -> Unit) -> Unit,
-    onDone: (String) -> Unit
+    onDone: (String, Double, CurrencyCode) -> Unit
 ) {
     var amount by remember { mutableStateOf("") }
     var selectedMethod by remember { mutableStateOf<PaymentMethodOption?>(null) }
@@ -902,7 +941,7 @@ private fun TakeOfferDialog(
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                         TextButton(onClick = onDismiss) { Text("Cerrar") }
                         Spacer(Modifier.width(8.dp))
-                        PrimaryAction("Ir a Transacciones", { onDone(transactionCode.orEmpty()) })
+                        PrimaryAction("Ir a Transacciones", { onDone(transactionCode.orEmpty(), amountValue ?: 0.0, offer.fromCurrency) })
                     }
                 }
             }
@@ -1017,4 +1056,9 @@ private fun currencySymbol(currency: CurrencyCode): String = when (currency) {
     CurrencyCode.EUR -> "€"
     CurrencyCode.JPY -> "¥"
     CurrencyCode.GBP -> "£"
+}
+
+private fun formatMoney(value: Double, currency: CurrencyCode?): String {
+    val symbol = currency?.let { currencySymbol(it) } ?: "S/"
+    return "$symbol ${"%.2f".format(value)}"
 }
