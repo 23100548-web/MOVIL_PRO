@@ -57,6 +57,7 @@ class FirebaseWalletRepository(
      * tanto el registro topUp como su movimiento de auditoria.
      */
     suspend fun topUp(request: TopUpRequest) {
+        require(request.amount > 0.0) { "El monto a recargar debe ser mayor a 0." }
         val db = dbProvider()
         val uid = userId()
         val walletRef = db.collection(FirebaseCollections.WALLETS).document(uid)
