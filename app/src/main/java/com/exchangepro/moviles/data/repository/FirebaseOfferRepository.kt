@@ -54,6 +54,10 @@ class FirebaseOfferRepository(
      * atomicamente, evitando publicar ofertas sin fondos.
      */
     suspend fun createOffer(request: CreateOfferRequest) {
+        require(request.offeredAmount > 0.0) { "El monto ofertado debe ser mayor a 0." }
+        require(request.minimumAmount > 0.0) { "El monto minimo debe ser mayor a 0." }
+        require(request.minimumAmount <= request.offeredAmount) { "El monto minimo no puede ser mayor que el monto ofertado." }
+        require(request.exchangeRate > 0.0) { "La tasa de cambio debe ser mayor a 0." }
         val db = dbProvider()
         val uid = currentUserId()
         val holdCurrency = if (request.operationType == OperationType.COMPRA) {

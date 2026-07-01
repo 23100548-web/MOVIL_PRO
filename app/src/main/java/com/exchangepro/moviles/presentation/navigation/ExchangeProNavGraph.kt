@@ -50,7 +50,7 @@ fun ExchangeProNavGraph() {
             ExchangeScaffold(navController, "Wallet") { WalletScreen() }
         }
         composable(Route.Transactions.value) {
-            ExchangeScaffold(navController, "Transacciones") { TransactionsScreen() }
+            ExchangeScaffold(navController, "Transacciones") { TransactionsScreen(navController) }
         }
         composable(Route.PaymentData.value) {
             ExchangeScaffold(navController, "Datos de pago") { PaymentDataScreen() }

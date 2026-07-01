@@ -43,6 +43,14 @@ class FirebaseRatingRepository(
             val sellerId = operation.getString("sellerId").orEmpty()
             require(uid == buyerId || uid == sellerId) { "No perteneces a esta transaccion." }
             val ratedUserId = if (uid == buyerId) sellerId else buyerId
+
+            val ratedUserRef = db.collection(FirebaseCollections.USERS).document(ratedUserId)
+            val ratedUser = transaction.get(ratedUserRef)
+            val currentRep = if (ratedUser.exists()) ratedUser.getDouble("reputation") ?: 5.0 else 5.0
+            val currentTotal = if (ratedUser.exists()) ratedUser.getLong("totalRatings") ?: 0L else 0L
+            val newTotal = currentTotal + 1
+            val newRep = (currentRep * currentTotal + score).toDouble() / newTotal
+
             transaction.set(
                 ratingRef,
                 mapOf(
@@ -54,6 +62,16 @@ class FirebaseRatingRepository(
                     "createdAt" to FieldValue.serverTimestamp()
                 )
             )
+
+            if (ratedUser.exists()) {
+                transaction.update(
+                    ratedUserRef,
+                    mapOf(
+                        "reputation" to newRep,
+                        "totalRatings" to newTotal
+                    )
+                )
+            }
             null
         }.awaitRating()
     }

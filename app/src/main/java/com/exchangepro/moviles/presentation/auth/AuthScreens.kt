@@ -1,10 +1,13 @@
 package com.exchangepro.moviles.presentation.auth
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.ui.res.painterResource
+import com.exchangepro.moviles.R
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -320,27 +324,32 @@ fun RegisterScreen(navController: NavController) {
 
 @Composable
 private fun AuthContainer(scroll: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
-    if (scroll) {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            item {
-                Column(modifier = Modifier.fillMaxWidth(), content = content)
+    Surface(
+        color = MaterialTheme.colorScheme.background,
+        modifier = Modifier.fillMaxSize()
+    ) {
+        if (scroll) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                item {
+                    Column(modifier = Modifier.fillMaxWidth(), content = content)
+                }
             }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+                content = content
+            )
         }
-    } else {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally,
-            content = content
-        )
     }
 }
 
@@ -351,15 +360,13 @@ private fun BrandHeader(title: String, subtitle: String) {
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
+        Image(
+            painter = painterResource(id = R.drawable.app_logo),
+            contentDescription = "ExchangePro Logo",
             modifier = Modifier
                 .size(44.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(ExchangePrimary),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Default.CurrencyExchange, contentDescription = null, tint = Color.White)
-        }
+        )
         Spacer(Modifier.width(10.dp))
         Text("ExchangePro", color = ExchangePrimary, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
     }
