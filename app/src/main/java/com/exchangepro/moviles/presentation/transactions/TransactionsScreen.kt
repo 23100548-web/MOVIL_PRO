@@ -69,10 +69,12 @@ import com.exchangepro.moviles.ui.theme.ExchangePositive
 import com.exchangepro.moviles.ui.theme.ExchangePrimary
 import com.exchangepro.moviles.ui.theme.ExchangePrimaryLight
 import com.exchangepro.moviles.ui.theme.ExchangeSurface
+import androidx.navigation.NavController
+import com.exchangepro.moviles.presentation.navigation.Route
 import kotlinx.coroutines.launch
 
 @Composable
-fun TransactionsScreen() {
+fun TransactionsScreen(navController: NavController) {
     val repository = remember { FirebaseTransactionRepository() }
     val attachmentRepository = remember { FirebaseAttachmentRepository() }
     val ratingRepository = remember { FirebaseRatingRepository() }
@@ -209,9 +211,8 @@ fun TransactionsScreen() {
                 }
             },
             onDispute = {
-                performAction("Transaccion marcada en disputa: ${trx.code}.") {
-                    repository.openDispute(trx.id)
-                }
+                selected = null
+                navController.navigate(Route.Disputes.value)
             },
             onRate = {
                 scope.launch {
