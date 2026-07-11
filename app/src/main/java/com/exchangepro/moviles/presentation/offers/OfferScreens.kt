@@ -74,6 +74,7 @@ import com.exchangepro.moviles.ui.theme.ExchangePositive
 import com.exchangepro.moviles.ui.theme.ExchangePrimary
 import com.exchangepro.moviles.ui.theme.ExchangePrimaryLight
 import com.exchangepro.moviles.ui.theme.ExchangeSurface
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
 import kotlin.math.round
 
@@ -88,6 +89,7 @@ fun OffersScreen(navController: NavController) {
     var takingOffer by remember { mutableStateOf<Offer?>(null) }
     var actionMessage by remember { mutableStateOf<String?>(null) }
     var actionFailed by remember { mutableStateOf(false) }
+    var offerActionSaving by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(true) }
     var showSuccessDialog by remember { mutableStateOf(false) }
     var successData by remember { mutableStateOf(Pair("", "")) }
@@ -97,14 +99,22 @@ fun OffersScreen(navController: NavController) {
     }
 
     LaunchedEffect(Unit) {
-        try {
-            reloadOffers()
-        } catch (error: Exception) {
-            actionFailed = true
-            actionMessage = error.message ?: "No se pudieron cargar las ofertas."
-        } finally {
-            loading = false
-        }
+        offerRepository.observeActiveOffers()
+            .catch { error ->
+                actionFailed = true
+                actionMessage = error.message ?: "No se pudieron cargar las ofertas."
+                loading = false
+            }
+            .collect { updatedOffers ->
+                offers = updatedOffers
+                selectedOffer = selectedOffer?.let { selected ->
+                    updatedOffers.firstOrNull { it.id == selected.id }
+                }
+                takingOffer = takingOffer?.let { selected ->
+                    updatedOffers.firstOrNull { it.id == selected.id }
+                }
+                loading = false
+            }
     }
 
     LazyColumn(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -142,10 +152,13 @@ fun OffersScreen(navController: NavController) {
         OfferDetailDialog(
             offer = offer,
             isMine = offer.userId == currentUserId,
+            saving = offerActionSaving,
             onDismiss = { selectedOffer = null },
             onAction = {
+                if (offerActionSaving) return@OfferDetailDialog
                 if (offer.userId == currentUserId) {
                     scope.launch {
+                        offerActionSaving = true
                         try {
                             offerRepository.cancelOffer(offer.id)
                             reloadOffers()
@@ -155,6 +168,8 @@ fun OffersScreen(navController: NavController) {
                         } catch (error: Exception) {
                             actionFailed = true
                             actionMessage = error.message ?: "No se pudo cancelar la oferta."
+                        } finally {
+                            offerActionSaving = false
                         }
                     }
                 } else {
@@ -212,6 +227,7 @@ fun MyOffersScreen(navController: NavController) {
     var selectedOffer by remember { mutableStateOf<Offer?>(null) }
     var actionMessage by remember { mutableStateOf<String?>(null) }
     var actionFailed by remember { mutableStateOf(false) }
+    var offerActionSaving by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(true) }
     var showSuccessDialog by remember { mutableStateOf(false) }
     var successData by remember { mutableStateOf(Pair("", "")) }
@@ -221,14 +237,19 @@ fun MyOffersScreen(navController: NavController) {
     }
 
     LaunchedEffect(Unit) {
-        try {
-            reloadOffers()
-        } catch (error: Exception) {
-            actionFailed = true
-            actionMessage = error.message ?: "No se pudieron cargar tus ofertas."
-        } finally {
-            loading = false
-        }
+        offerRepository.observeMyActiveOffers()
+            .catch { error ->
+                actionFailed = true
+                actionMessage = error.message ?: "No se pudieron cargar tus ofertas."
+                loading = false
+            }
+            .collect { updatedOffers ->
+                myOffers = updatedOffers
+                selectedOffer = selectedOffer?.let { selected ->
+                    updatedOffers.firstOrNull { it.id == selected.id }
+                }
+                loading = false
+            }
     }
 
     LazyColumn(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -275,9 +296,12 @@ fun MyOffersScreen(navController: NavController) {
         OfferDetailDialog(
             offer = offer,
             isMine = true,
+            saving = offerActionSaving,
             onDismiss = { selectedOffer = null },
             onAction = {
+                if (offerActionSaving) return@OfferDetailDialog
                 scope.launch {
+                    offerActionSaving = true
                     try {
                         offerRepository.cancelOffer(offer.id)
                         reloadOffers()
@@ -287,6 +311,8 @@ fun MyOffersScreen(navController: NavController) {
                     } catch (error: Exception) {
                         actionFailed = true
                         actionMessage = error.message ?: "No se pudo cancelar la oferta."
+                    } finally {
+                        offerActionSaving = false
                     }
                 }
                 selectedOffer = null
@@ -459,6 +485,7 @@ fun CreateOfferScreen(navController: NavController) {
                     Spacer(Modifier.width(10.dp))
                     Button(
                         onClick = {
+                            if (saving) return@Button
                             submitted = true
                             val offered = offeredAmount.toDoubleOrNull()
                             val minimum = minimumAmount.toDoubleOrNull()
@@ -610,7 +637,8 @@ private fun AmountField(
     value: String,
     onValueChange: (String) -> Unit,
     hint: String? = null,
-    showRequired: Boolean = false
+    showRequired: Boolean = false,
+    errorMessage: String = "Requerido"
 ) {
     Column {
         Text(label, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
@@ -624,7 +652,7 @@ private fun AmountField(
             isError = showRequired
         )
         if (showRequired) {
-            Text("Requerido", color = ExchangeNegative, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 12.dp, top = 3.dp))
+            Text(errorMessage, color = ExchangeNegative, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 12.dp, top = 3.dp))
         }
         hint?.let {
             Text(it, color = ExchangeMuted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 2.dp, top = 4.dp))
@@ -675,11 +703,12 @@ private fun OfferCard(offer: Offer, onClick: () -> Unit) {
 private fun OfferDetailDialog(
     offer: Offer,
     isMine: Boolean,
+    saving: Boolean,
     onDismiss: () -> Unit,
     onAction: () -> Unit
 ) {
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!saving) onDismiss() },
         confirmButton = {},
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -698,7 +727,7 @@ private fun OfferDetailDialog(
                         Text("Detalle de Oferta", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
                         Text(offer.userName, color = ExchangeMuted)
                     }
-                    IconButton(onClick = onDismiss) {
+                    IconButton(onClick = onDismiss, enabled = !saving) {
                         Icon(Icons.Default.Close, contentDescription = "Cerrar")
                     }
                 }
@@ -727,21 +756,22 @@ private fun OfferDetailDialog(
                         style = MaterialTheme.typography.bodySmall
                     )
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        TextButton(onClick = onDismiss) { Text("Cerrar") }
+                        TextButton(onClick = onDismiss, enabled = !saving) { Text("Cerrar") }
                         Spacer(Modifier.width(8.dp))
                         Button(
                             onClick = onAction,
+                            enabled = !saving,
                             colors = ButtonDefaults.buttonColors(containerColor = ExchangeNegative),
                             shape = RoundedCornerShape(8.dp)
                         ) {
-                            Text("Cancelar oferta")
+                            Text(if (saving) "Procesando..." else "Cancelar oferta")
                         }
                     }
                 } else {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        TextButton(onClick = onDismiss) { Text("Cancelar") }
+                        TextButton(onClick = onDismiss, enabled = !saving) { Text("Cancelar") }
                         Spacer(Modifier.width(8.dp))
-                        PrimaryAction(actionLabel(offer), onAction)
+                        PrimaryAction(if (saving) "Procesando..." else actionLabel(offer), onAction, enabled = !saving)
                     }
                 }
             }
@@ -772,8 +802,15 @@ private fun TakeOfferDialog(
     val methods = remember(offer) { paymentMethodsForOffer(offer) }
     val amountValue = amount.toDoubleOrNull()
     val converted = (amountValue ?: 0.0) * offer.exchangeRate
+    val amountError = when {
+        amountValue == null || amountValue <= 0.0 -> "Ingresa un monto."
+        amountValue < offer.minimumAmount || amountValue > offer.offeredAmount ->
+            "El monto debe estar entre %.2f y %.2f %s."
+                .format(offer.minimumAmount, offer.offeredAmount, offer.fromCurrency)
+        else -> null
+    }
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!saving) onDismiss() },
         confirmButton = {},
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -802,7 +839,7 @@ private fun TakeOfferDialog(
                         )
                         Text("${offer.fromCurrency} por ${offer.toCurrency}", color = ExchangeMuted)
                     }
-                    IconButton(onClick = onDismiss) {
+                    IconButton(onClick = onDismiss, enabled = !saving) {
                         Icon(Icons.Default.Close, contentDescription = "Cerrar")
                     }
                 }
@@ -821,7 +858,8 @@ private fun TakeOfferDialog(
                         },
                         value = amount,
                         onValueChange = { amount = it },
-                        showRequired = submitted && !isValidOfferAmount(amountValue, offer)
+                        showRequired = submitted && amountError != null,
+                        errorMessage = amountError.orEmpty()
                     )
 
                     if (amountValue != null && amountValue > 0.0) {
@@ -878,9 +916,9 @@ private fun TakeOfferDialog(
                     }
 
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        TextButton(onClick = onDismiss) { Text("Cancelar") }
+                        TextButton(onClick = onDismiss, enabled = !saving) { Text("Cancelar") }
                         Spacer(Modifier.width(8.dp))
-                        PrimaryAction("Confirmar Operacion", {
+                        PrimaryAction(if (saving) "Procesando..." else "Confirmar Operacion", {
                             submitted = true
                             if (!saving && isValidOfferAmount(amountValue, offer) && selectedMethod != null) {
                                 saving = true
@@ -900,7 +938,7 @@ private fun TakeOfferDialog(
                                     )
                                 }
                             }
-                        })
+                        }, enabled = !saving)
                     }
                     createError?.let {
                         Text(it, color = ExchangeNegative, style = MaterialTheme.typography.bodySmall)
@@ -972,31 +1010,26 @@ private fun actionLabel(offer: Offer): String =
 private fun isValidOfferAmount(amount: Double?, offer: Offer): Boolean =
     amount != null &&
         amount >= offer.minimumAmount &&
-        amount <= offer.offeredAmount &&
-        ((offer.offeredAmount - amount) <= 0.0001 || (offer.offeredAmount - amount) >= offer.minimumAmount)
+        amount <= offer.offeredAmount
 
 private fun paymentMethodsForOffer(offer: Offer): List<PaymentMethodOption> {
-    val rawLabels = if (offer.paymentMethods.isEmpty()) {
-        listOf("Yape", "Plin", "Transferencia Bancaria", "Wallet Interna")
-    } else {
-        offer.paymentMethods + "Wallet Interna"
-    }
+    val rawLabels = offer.paymentMethods + "Wallet Interna"
     val labels = rawLabels
         .map(::paymentMethodLabel)
         .distinctBy { it.lowercase() }
 
-    return labels.mapIndexed { index, method ->
-        PaymentMethodOption(
-            id = index + 1,
-            label = method,
-            detail = when {
-                method.contains("Yape", ignoreCase = true) -> "999 888 777"
-                method.contains("Plin", ignoreCase = true) -> "999 888 777"
-                method.contains("BCP", ignoreCase = true) -> "BCP 193-1234567-0-00"
-                method.contains("Interbank", ignoreCase = true) -> "Interbank 898-1234567890"
-                method.contains("Wallet", ignoreCase = true) -> "Saldo interno ExchangePro"
-                else -> "Cuenta registrada del vendedor"
+    return labels.mapNotNull { method ->
+        val detail = offer.paymentMethodDetails.entries
+            .firstOrNull { paymentMethodLabel(it.key) == method }
+            ?.value
+            .orEmpty()
+            .ifBlank {
+                if (method == "Wallet Interna") "Saldo interno ExchangePro" else return@mapNotNull null
             }
+        PaymentMethodOption(
+            id = method.hashCode(),
+            label = method,
+            detail = detail
         )
     }
 }
